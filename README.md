@@ -13,8 +13,8 @@ Puis ouvrir http://localhost:8000. Sur Android (Chrome), l'installation exige HT
 ## Fichiers
 
 - `index.html`, `style.css`, `app.js` : page, styles, installation (proposée dans les réglages)
-- `src/moteur/` : la logique du jeu (BS2), testée par `npm test`
-- `src/ui/jeu.js` : l'écran de jeu, qui affiche l'état du moteur et lui relaie le glisser au doigt ; `src/ui/stockage.js` : meilleur score et vibration, gardés sur l'appareil
+- `src/moteur/` : la logique du jeu (BS2), testée par `npm test` ; un coup rend aussi ses étapes (`dernierCoup.etapes`)
+- `src/ui/jeu.js` : l’écran de jeu, qui joue les étapes d’un coup une à une (durées dans `DUREES_MS`) et lui relaie le glisser au doigt ; `src/ui/stockage.js` : meilleur score et vibration, gardés sur l'appareil
 - `manifest.webmanifest` : nom, affichage plein écran, orientation portrait, couleurs, icônes
 - `sw.js` : service worker (précache, ouverture hors ligne). Changer `VERSION` quand un fichier précaché change, et y lister tout nouveau fichier
 - `icons/` : icônes, régénérables par `python tools/icones.py`

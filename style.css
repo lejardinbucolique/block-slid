@@ -118,7 +118,8 @@ button { font: inherit; color: inherit; }
   position: absolute;
   left: 0;
   top: 0;
-  transition: transform .3s cubic-bezier(.3, .7, .25, 1), height .3s ease, width .3s ease;
+  /* --duree : la durée de l'étape du coup en cours (posée par jeu.js). */
+  transition: transform var(--duree, .3s) cubic-bezier(.3, .7, .25, 1), height var(--duree, .3s) ease, width var(--duree, .3s) ease;
   will-change: transform;
 }
 
@@ -162,7 +163,7 @@ button { font: inherit; color: inherit; }
 @keyframes entre { from { opacity: 0; } }
 
 .bloc.efface { pointer-events: none; z-index: 1; }
-.bloc.efface > i { animation: efface .32s ease-in forwards; }
+.bloc.efface > i { animation: efface var(--duree, .32s) ease-in forwards; }
 @keyframes efface {
   35% { filter: brightness(2); transform: scale(1.04); }
   to { opacity: 0; transform: scale(.3); filter: brightness(2); }
@@ -170,6 +171,36 @@ button { font: inherit; color: inherit; }
 
 .bloc.secoue > i { animation: secoue .3s linear; }
 @keyframes secoue { 20% { transform: translateX(-4px); } 50% { transform: translateX(4px); } 80% { transform: translateX(-2px); } }
+
+/* Une ligne pleine s'allume avant de s'effacer. */
+.bloc.allume > i { animation: allume var(--duree, .3s) ease-in-out; }
+@keyframes allume { 50% { filter: brightness(2.1); transform: scale(1.06); } }
+
+/* Le secours : la copie apparaît d'un temps net ; la ligne à venir lui laisse la place. */
+.bloc.cache > i { opacity: 0; }
+
+/* Les points qui montent depuis une ligne effacée. */
+.points {
+  position: absolute;
+  left: 0;
+  z-index: 3;
+  margin-top: calc(var(--ch) * -.5);
+  height: var(--ch);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--ch) * .85);
+  font-weight: 800;
+  color: var(--accent);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .55), 0 0 6px rgba(0, 0, 0, .4);
+  pointer-events: none;
+  animation: points .9s ease-out forwards;
+}
+@keyframes points {
+  from { transform: translateY(0) scale(.7); opacity: 0; }
+  20% { opacity: 1; transform: translateY(calc(var(--ch) * -.3)) scale(1.1); }
+  to { transform: translateY(calc(var(--ch) * -1.6)); opacity: 0; }
+}
 
 #plateau.instant .bloc, #plateau.instant .bloc > i { transition: none !important; animation: none !important; }
 

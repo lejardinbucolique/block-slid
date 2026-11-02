@@ -6,6 +6,13 @@
 // Lignes numérotées de haut (0) en bas (reglages.lignes - 1), colonnes de
 // gauche (0) à droite. Un bloc : { id, ligne, col, largeur, couleur }. Les
 // blocs des lignes à venir n'ont pas de ligne ; ils gardent leur id en montant.
+//
+// Un coup rend aussi, dans dernierCoup.etapes, son déroulé pour l'écran : une
+// suite d'instantanés { genre, blocs, aVenir, ... }, chacun étant ce qu'on voit
+// à la fin d'une étape. Le dernier est exactement l'état final. Genres :
+// 'glisse' (le geste du joueur), 'complete' (lignes pleines, encore en place :
+// lignes = [{ ligne, points }]), 'efface' (ces lignes ont disparu), 'chute',
+// 'secours' (la copie apparaît, hors grille : copies), 'montee' et 'defaite'.
 
 import { REGLAGES } from './reglages.js'
 
@@ -63,34 +70,31 @@ export function jouer(etat, id, dx) {
 
   e.coups++
   e.aVenirDeplace = false
-  const coup = { lignesEffacees: 0, points: 0, secours: null, defaite: false }
-  ajouter(coup, resoudre(e))
+  const etapes = [instantane(e, 'glisse')]
+  const coup = { lignesEffacees: 0, points: 0, secours: null, defaite: false, etapes }
+  ajouter(coup, resoudre(e, etapes))
 
   // Secours quand la grille est presque vide (bloc 19 de l'analyse).
   // Défauts à confirmer : une ligne « restante » est une ligne qui contient au
   // moins un bloc ; une copie n'est pas un tirage, la file à venir n'avance
   // donc que d'un cran ; les copies se résolvent comme toute arrivée de ligne.
+  // Chaque montée garde avec elle la file à venir qu'on voit une fois montée :
+  // celle d'avant tant que c'est une copie qui monte, la suivante pour la vraie.
   const montees = []
+  const vue = e.aVenir
   const restantes = new Set(e.blocs.map((b) => b.ligne))
   if (restantes.size === 1) {
     const [ligne] = restantes
     coup.secours = 'une ligne'
-    montees.push(copier(e, e.blocs.filter((b) => b.ligne === ligne)))
+    montees.push(copierEtape(e, e.blocs.filter((b) => b.ligne === ligne), vue, etapes))
   } else if (restantes.size === 0) {
     coup.secours = 'aucune ligne'
-    montees.push(copier(e, e.aVenir[0]))
+    montees.push(copierEtape(e, e.aVenir[0], vue, etapes))
   }
-  montees.push(e.aVenir[0])
   e.aVenir = [e.aVenir[1], tirerUneLigne(e)]
+  montees.push({ ligne: vue[0], aVenir: e.aVenir })
 
-  for (const ligne of montees) {
-    if (!monterLigne(e, ligne)) {
-      e.finie = true
-      coup.defaite = true
-      break
-    }
-  }
-  if (!e.finie) ajouter(coup, resoudre(e))
+  if (monterLignes(e, montees, coup)) ajouter(coup, resoudre(e, etapes))
   // La résolution qui suit la montée peut encore vider la grille : même
   // secours en fin de coup, répété tant qu'il reste moins de 2 lignes occupées.
   while (!e.finie && lignesOccupees(e) < 2) {
@@ -99,20 +103,15 @@ export function jouer(etat, id, dx) {
     if (restes.size === 1) {
       const [ligne] = restes
       coup.secours = 'une ligne'
-      fin.push(copier(e, e.blocs.filter((b) => b.ligne === ligne)))
+      fin.push(copierEtape(e, e.blocs.filter((b) => b.ligne === ligne), e.aVenir, etapes))
     } else {
       coup.secours = 'aucune ligne'
-      fin.push(copier(e, e.aVenir[0]), e.aVenir[0])
+      const avant = e.aVenir
+      fin.push(copierEtape(e, e.aVenir[0], avant, etapes))
       e.aVenir = [e.aVenir[1], tirerUneLigne(e)]
+      fin.push({ ligne: avant[0], aVenir: e.aVenir })
     }
-    for (const ligne of fin) {
-      if (!monterLigne(e, ligne)) {
-        e.finie = true
-        coup.defaite = true
-        break
-      }
-    }
-    if (!e.finie) ajouter(coup, resoudre(e))
+    if (monterLignes(e, fin, coup)) ajouter(coup, resoudre(e, etapes))
   }
 
   e.score += coup.points
@@ -267,16 +266,26 @@ function pousserDUneCase(rangee, id, sens, colonnes) {
 // Gravité puis effacement des lignes pleines, répétés tant que quelque chose
 // bouge ou disparaît. Les points montent avec le rang de chaque ligne effacée
 // dans cette résolution.
-function resoudre(etat) {
+// Si `etapes` est donné, y note chaque temps : chute, lignes complétées, lignes
+// effacées. Les lignes d'une même vague comptent de bas en haut.
+function resoudre(etat, etapes = null) {
   const bilan = { lignesEffacees: 0, points: 0 }
   for (;;) {
     const tombe = appliquerGravite(etat)
-    const effacees = effacerLignesPleines(etat)
-    for (let k = 0; k < effacees; k++) {
-      bilan.lignesEffacees++
-      bilan.points += etat.reglages.pointsLigne(bilan.lignesEffacees, etat.reglages)
+    if (tombe) etapes?.push(instantane(etat, 'chute'))
+    const pleines = lignesPleines(etat)
+    if (pleines.length) {
+      const lignes = pleines.map((ligne) => {
+        bilan.lignesEffacees++
+        const points = etat.reglages.pointsLigne(bilan.lignesEffacees, etat.reglages)
+        bilan.points += points
+        return { ligne, points }
+      })
+      etapes?.push(instantane(etat, 'complete', { lignes }))
+      etat.blocs = etat.blocs.filter((b) => !pleines.includes(b.ligne))
+      etapes?.push(instantane(etat, 'efface', { lignes }))
     }
-    if (!tombe && effacees === 0) return bilan
+    if (!tombe && pleines.length === 0) return bilan
   }
 }
 
@@ -307,12 +316,50 @@ function appliquerGravite(etat) {
   return bouge
 }
 
-function effacerLignesPleines(etat) {
+// Les lignes pleines, de bas en haut.
+function lignesPleines(etat) {
   const remplies = new Map()
   for (const b of etat.blocs) remplies.set(b.ligne, (remplies.get(b.ligne) ?? 0) + b.largeur)
-  const pleines = new Set([...remplies].filter(([, n]) => n === etat.reglages.colonnes).map(([l]) => l))
-  if (pleines.size) etat.blocs = etat.blocs.filter((b) => !pleines.has(b.ligne))
-  return pleines.size
+  return [...remplies]
+    .filter(([, n]) => n === etat.reglages.colonnes)
+    .map(([l]) => l)
+    .sort((a, b) => b - a)
+}
+
+// Fait monter les lignes une à une, chacune notée comme une étape. Chaque
+// élément : { ligne, aVenir } avec la file à venir visible une fois montée.
+// Faux si l'une ne passe pas : la partie est perdue.
+function monterLignes(etat, montees, coup) {
+  for (const { ligne, aVenir } of montees) {
+    if (!monterLigne(etat, ligne)) {
+      etat.finie = true
+      coup.defaite = true
+      coup.etapes.push(instantane(etat, 'defaite'))
+      return false
+    }
+    coup.etapes.push(instantane(etat, 'montee', { aVenir }))
+  }
+  return true
+}
+
+// Fait apparaître la copie de secours hors de la grille, et rend la montée qui
+// l'attend. `vue` est la file à venir qu'on voit à ce moment-là.
+function copierEtape(etat, blocs, vue, etapes) {
+  const copies = copier(etat, blocs)
+  etapes.push(instantane(etat, 'secours', { aVenir: vue, copies }))
+  return { ligne: copies, aVenir: vue }
+}
+
+// Ce qu'on voit à la fin d'une étape : copie des blocs, que la suite ne touche pas.
+function instantane(etat, genre, { aVenir = etat.aVenir, ...reste } = {}) {
+  const figer = (b) => ({ ...b })
+  return {
+    genre,
+    blocs: etat.blocs.map(figer),
+    aVenir: aVenir.map((l) => l.map(figer)),
+    ...(reste.copies && { copies: reste.copies.map(figer) }),
+    ...(reste.lignes && { lignes: reste.lignes }),
+  }
 }
 
 // Fait monter une ligne par le bas. Refuse (false) si un bloc occupe la ligne

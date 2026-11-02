@@ -1,4 +1,6 @@
 import { test } from 'node:test'
+import { readFileSync } from 'node:fs'
+import { partie, resume, empreinte } from './partie-type.js'
 import assert from 'node:assert/strict'
 import {
   REGLAGES,
@@ -281,5 +283,57 @@ test('invariant : après tout coup, au moins 2 lignes et un coup possible', () =
         if (!e.finie) assert.ok(occupees(e) >= 2, `${nom} graine ${g} coup ${n} : ${occupees(e)} ligne(s)`)
       }
     }
+  }
+})
+
+// --- Étapes d'un coup (BS5) ------------------------------------------------
+
+const kinds = (e) => e.dernierCoup.etapes.map((s) => s.genre)
+
+test('étapes : glisse, ligne complétée, effacée, chute, montée dans cet ordre', () => {
+  const e = position(['..1.1...', '221.4444', '1111.111'], [LIGNE_TIREE, '1.1.1.1.'])
+  const apres = jouer(e, idEn(e, 3, 2), 1)
+  assert.deepEqual(kinds(apres), [
+    'glisse', 'chute', 'complete', 'efface', 'chute', 'complete', 'efface', 'secours', 'montee', 'montee',
+  ])
+  const [, , complete1, efface1, , complete2] = apres.dernierCoup.etapes
+  assert.deepEqual(complete1.lignes, [{ ligne: 4, points: 10 }])
+  assert.deepEqual(complete2.lignes, [{ ligne: 5, points: 20 }])
+  // Ligne complétée : encore en place ; effacée : ses blocs ont disparu.
+  assert.equal(complete1.blocs.filter((b) => b.ligne === 4).length > 0, true)
+  assert.equal(efface1.blocs.filter((b) => b.ligne === 4).length, 0)
+  // La copie de secours apparaît hors de la grille, avant de monter.
+  const secours = apres.dernierCoup.etapes.find((s) => s.genre === 'secours')
+  assert.equal(secours.copies.length, 2)
+  assert.equal(secours.blocs.length, 0)
+})
+
+test("étapes : la défaite est la dernière étape", () => {
+  const e = position(Array(6).fill('22......'))
+  const apres = jouer(e, idEn(e, 0, 0), 1)
+  assert.equal(kinds(apres).at(-1), 'defaite')
+})
+
+test("étapes : le dernier instantané est l'état final", () => {
+  for (let g = 1; g <= 150; g++) {
+    for (const { apres } of partie(g)) {
+      const dernier = apres.dernierCoup.etapes.at(-1)
+      assert.deepEqual(dernier.blocs, apres.blocs, `graine ${g} coup ${apres.coups}`)
+      assert.deepEqual(dernier.aVenir, apres.aVenir, `graine ${g} coup ${apres.coups}`)
+      assert.equal(apres.dernierCoup.etapes[0].genre, 'glisse')
+      const points = apres.dernierCoup.etapes
+        .filter((s) => s.genre === 'complete')
+        .reduce((n, s) => n + s.lignes.reduce((m, l) => m + l.points, 0), 0)
+      assert.equal(points, apres.dernierCoup.points)
+    }
+  }
+})
+
+test("étapes : rien ne change aux parties (même état, même score qu'avant)", () => {
+  const reference = JSON.parse(readFileSync(new URL('./reference-parties.json', import.meta.url), 'utf8'))
+  for (let g = 1; g <= 300; g++) {
+    let t = ''
+    for (const { apres } of partie(g)) t += resume(apres) + '\n'
+    assert.equal(empreinte(t), reference[g], `graine ${g}`)
   }
 })
