@@ -51,6 +51,87 @@ function etatVide(reglages, graine) {
   }
 }
 
+// --- Garder une partie ----------------------------------------------------
+
+// Change quand la forme des données gardées change : une partie gardée avec un
+// autre numéro n'est plus relue.
+export const SCHEMA_PARTIE = 1
+
+// L'état d'une partie en données simples (JSON), sans `reglages` (il contient
+// une fonction) ni `dernierCoup` (utile au seul affichage du coup qui vient d'être joué).
+export function exporterPartie(etat) {
+  const figer = (b) => ({ id: b.id, ligne: b.ligne, col: b.col, largeur: b.largeur, couleur: b.couleur })
+  const figerAVenir = (b) => ({ id: b.id, col: b.col, largeur: b.largeur, couleur: b.couleur })
+  return {
+    schema: SCHEMA_PARTIE,
+    blocs: etat.blocs.map(figer),
+    aVenir: etat.aVenir.map((l) => l.map(figerAVenir)),
+    score: etat.score,
+    coups: etat.coups,
+    finie: etat.finie,
+    aVenirDeplace: etat.aVenirDeplace,
+    hasard: etat.hasard,
+    prochainId: etat.prochainId,
+  }
+}
+
+// Reconstruit un état jouable depuis des données exportées, ou null si elles
+// sont d'une autre version, de forme invalide ou incohérentes (blocs qui
+// se chevauchent, qui sortent de la grille, identifiants en double...).
+export function importerPartie(donnees, reglages = REGLAGES) {
+  try {
+    return lirePartie(donnees, reglages)
+  } catch {
+    return null
+  }
+}
+
+function lirePartie(d, reglages) {
+  if (!d || typeof d !== 'object' || d.schema !== SCHEMA_PARTIE) return null
+  const { lignes, colonnes } = reglages
+  const entier = (n, min, max = Number.MAX_SAFE_INTEGER) => Number.isInteger(n) && n >= min && n <= max
+  if (!entier(d.score, 0) || !entier(d.coups, 0) || !entier(d.hasard, 0, 0xffffffff) || !entier(d.prochainId, 1)) return null
+  if (typeof d.finie !== 'boolean' || typeof d.aVenirDeplace !== 'boolean') return null
+  if (!Array.isArray(d.blocs) || !Array.isArray(d.aVenir) || d.aVenir.length !== 2) return null
+
+  const ids = new Set()
+  const lireBloc = (b, avecLigne) => {
+    if (!b || typeof b !== 'object') return null
+    if (!entier(b.id, 1, d.prochainId - 1) || ids.has(b.id)) return null
+    if (!entier(b.largeur, 1, colonnes) || !entier(b.col, 0, colonnes - b.largeur)) return null
+    if (typeof b.couleur !== 'string' || !reglages.couleurs.includes(b.couleur)) return null
+    if (avecLigne && !entier(b.ligne, 0, lignes - 1)) return null
+    ids.add(b.id)
+    return avecLigne
+      ? { id: b.id, ligne: b.ligne, col: b.col, largeur: b.largeur, couleur: b.couleur }
+      : { id: b.id, col: b.col, largeur: b.largeur, couleur: b.couleur }
+  }
+  // Une rangée ne doit pas avoir deux blocs sur la même case.
+  const sansChevauchement = (rangee) => {
+    const tries = [...rangee].sort((a, b) => a.col - b.col)
+    return tries.every((b, i) => i === 0 || tries[i - 1].col + tries[i - 1].largeur <= b.col)
+  }
+
+  const blocs = d.blocs.map((b) => lireBloc(b, true))
+  const aVenir = d.aVenir.map((l) => (Array.isArray(l) ? l.map((b) => lireBloc(b, false)) : [null]))
+  if (blocs.includes(null) || aVenir.some((l) => l.includes(null) || l.length === 0)) return null
+
+  for (let ligne = 0; ligne < lignes; ligne++) {
+    if (!sansChevauchement(blocs.filter((b) => b.ligne === ligne))) return null
+  }
+  if (!aVenir.every(sansChevauchement)) return null
+
+  const e = etatVide(reglages, d.hasard)
+  e.blocs = blocs
+  e.aVenir = aVenir
+  e.score = d.score
+  e.coups = d.coups
+  e.finie = d.finie
+  e.aVenirDeplace = d.aVenirDeplace
+  e.prochainId = d.prochainId
+  return e
+}
+
 // --- Gestes --------------------------------------------------------------
 
 // Le coup : glisser un bloc de la grille de dx cases (négatif vers la gauche).

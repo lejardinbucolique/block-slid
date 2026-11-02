@@ -302,3 +302,5 @@ button { font: inherit; color: inherit; }
   .bloc { transition-duration: .01s; }
   .bloc > i, #score.saut { animation-duration: .01s; }
 }
+
+#version { font-size: .8rem; opacity: .6; text-align: center; min-height: 1em; }

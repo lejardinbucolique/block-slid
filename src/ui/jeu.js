@@ -11,6 +11,8 @@
 
 import {
   nouvellePartie,
+  exporterPartie,
+  importerPartie,
   jouer,
   deplacerAVenir,
   deplacementsPossibles,
@@ -23,6 +25,9 @@ import {
   retenirMeilleurScore,
   niveauVibration,
   retenirNiveauVibration,
+  partieGardee,
+  garderPartie,
+  oublierPartie,
   vibrer,
 } from './stockage.js'
 
@@ -59,7 +64,10 @@ export function demarrerJeu() {
   const scoreEl = $('score')
   const meilleurEl = $('meilleur-score')
 
-  let etat = nouvellePartie()
+  // La partie gardée se reprend telle quelle, sauf si elle est perdue ou
+  // illisible (autre version du jeu) : alors une nouvelle partie commence.
+  const gardee = importerPartie(partieGardee())
+  let etat = gardee && !gardee.finie ? gardee : nouvellePartie()
   let meilleur = meilleurScore()
   let niveau = niveauVibration()
   let geste = null
@@ -198,6 +206,14 @@ export function demarrerJeu() {
     plateau.classList.remove('instant')
   }
 
+  // Garde la partie sur l'appareil : appelée après chaque changement d'état, sans
+  // attendre la fin de l'animation, pour qu'un rechargement n'en perde rien.
+  // Une partie perdue ne se garde pas.
+  function garder() {
+    if (etat.finie) oublierPartie()
+    else garderPartie(exporterPartie(etat))
+  }
+
   // --- Un coup, pas à pas ---------------------------------------------------
 
   // Pose les étapes l'une après l'autre. L'état du moteur est déjà le final :
@@ -331,6 +347,7 @@ export function demarrerJeu() {
       return
     }
     etat = suivant
+    garder()
     vibrer(niveau)
     if (place === 'grille' && !moinsDeMouvement?.matches) {
       lireCoup(etat.dernierCoup.etapes)
@@ -386,6 +403,7 @@ export function demarrerJeu() {
     fin.hidden = true
     reglages.hidden = true
     etat = nouvellePartie()
+    garder()
     sansAnimation(() => {
       for (const rec of elements.values()) rec.el.remove()
       elements.clear()
@@ -459,5 +477,6 @@ export function demarrerJeu() {
   afficherVibration()
   mesurer()
   sansAnimation(() => afficher({ animer: false }))
+  garder() // une partie neuve est gardée dès son premier état affiché
   app.classList.add('pret')
 }
