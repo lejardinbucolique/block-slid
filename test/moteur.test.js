@@ -262,7 +262,7 @@ test('invariant : après tout coup, au moins 2 lignes et un coup possible', () =
   const choix = {
     hasard: (etat, coups, r) => coups[Math.floor(r() * coups.length)],
     plusBasse: (etat, coups) => {
-      let meilleur = null, h = -1
+      let meilleur = null, h = -Infinity
       for (const c of coups) {
         const s = jouer(etat, ...c)
         const hs = s.finie ? -2 : hauteur(s)
@@ -335,5 +335,34 @@ test("étapes : rien ne change aux parties (même état, même score qu'avant)",
     let t = ''
     for (const { apres } of partie(g)) t += resume(apres) + '\n'
     assert.equal(empreinte(t), reference[g], `graine ${g}`)
+  }
+})
+
+test('tirage : des milliers de lignes saines avec les proportions du jeu', () => {
+  const vues = { 1: 0, 2: 0, 3: 0, 4: 0 }
+  for (let g = 1; g <= 10; g++) {
+    const alea = hasard(g * 977)
+    for (let n = 0; n < 1000; n++) {
+      const ligne = REGLAGES.tirage(alea, REGLAGES)
+      const cases = ligne.reduce((s, b) => s + b.largeur, 0)
+      const fin = Math.max(...ligne.map((b) => b.col + b.largeur))
+      assert.ok(fin <= REGLAGES.colonnes, `graine ${g} ligne ${n} : déborde`)
+      assert.ok(cases < REGLAGES.colonnes, `graine ${g} ligne ${n} : pleine`)
+      for (let i = 1; i < ligne.length; i++) {
+        assert.ok(ligne[i].col >= ligne[i - 1].col + ligne[i - 1].largeur, 'chevauchement')
+        if (ligne[i].col === ligne[i - 1].col + ligne[i - 1].largeur)
+          assert.notEqual(ligne[i].couleur, ligne[i - 1].couleur, 'même couleur collée')
+      }
+      for (const b of ligne) vues[b.largeur]++
+    }
+  }
+  // Les tailles suivent à peu près les poids (marge large : la contrainte des
+  // 8 colonnes déforme la distribution).
+  const total = Object.values(vues).reduce((s, v) => s + v, 0)
+  const poids = REGLAGES.proportions.largeurBloc
+  const somme = Object.values(poids).reduce((s, v) => s + v, 0)
+  for (const l of [1, 2, 3, 4]) {
+    const attendu = poids[l] / somme
+    assert.ok(Math.abs(vues[l] / total - attendu) < 0.15, `largeur ${l} : ${(vues[l] / total).toFixed(2)} pour ${attendu.toFixed(2)}`)
   }
 })

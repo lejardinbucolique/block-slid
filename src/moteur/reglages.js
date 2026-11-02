@@ -21,7 +21,10 @@ export const REGLAGES = Object.freeze({
   proportions: Object.freeze({
     blocsParLigne: Object.freeze({ 2: 8, 3: 18, 4: 10 }),
     trousParLigne: Object.freeze({ 1: 14, 2: 18, 3: 4 }),
-    largeurBloc: Object.freeze({ 1: 51, 2: 36, 3: 17, 4: 6 }),
+    // Moins de petits blocs pour un jeu moins facile (BS6 ; jeu d'origine :
+    // { 1: 51, 2: 36, 3: 17, 4: 6 }). Si c'est encore trop facile, palier
+    // plus dur : { 1: 10, 2: 35, 3: 30, 4: 25 }.
+    largeurBloc: Object.freeze({ 1: 25, 2: 35, 3: 25, 4: 15 }),
     largeurTrou: Object.freeze({ 1: 42, 2: 14, 3: 4, 4: 2 }),
   }),
   // Défaut à confirmer en jouant : une ligne n'arrive jamais pleine (au moins
