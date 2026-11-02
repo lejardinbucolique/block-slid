@@ -1,0 +1,368 @@
+// Moteur de Block slid : la logique du jeu, sans écran ni navigateur.
+//
+// L'état est un objet simple, jamais modifié en place : chaque geste rend un
+// nouvel état, ou null s'il est refusé (l'ancien état reste alors valable).
+//
+// Lignes numérotées de haut (0) en bas (reglages.lignes - 1), colonnes de
+// gauche (0) à droite. Un bloc : { id, ligne, col, largeur, couleur }. Les
+// blocs des lignes à venir n'ont pas de ligne ; ils gardent leur id en montant.
+
+import { REGLAGES } from './reglages.js'
+
+// --- Partie --------------------------------------------------------------
+
+export function nouvellePartie({ graine = Date.now(), reglages = REGLAGES } = {}) {
+  const etat = etatVide(reglages, graine)
+  // Une ligne qui monte peut faire tomber les blocs du dessus et compléter une
+  // ligne effacée : on tire et monte des lignes jusqu'à en avoir exactement
+  // lignesDepart occupées. Chaque montée ajoute au plus une ligne occupée et la
+  // résolution n'en ajoute jamais : on s'arrête donc pile au compte.
+  while (lignesOccupees(etat) < reglages.lignesDepart) {
+    monterLigne(etat, tirerUneLigne(etat))
+    resoudre(etat)
+  }
+  etat.score = 0
+  etat.aVenir = [tirerUneLigne(etat), tirerUneLigne(etat)]
+  return etat
+}
+
+function etatVide(reglages, graine) {
+  return {
+    reglages,
+    blocs: [],
+    // Les deux prochaines lignes ; seule la première est déplaçable.
+    aVenir: [],
+    score: 0,
+    coups: 0,
+    finie: false,
+    // Un seul déplacement sur la ligne à venir par coup, avant celui sur la grille.
+    aVenirDeplace: false,
+    hasard: graine >>> 0,
+    prochainId: 1,
+    // Ce qu'a produit le dernier coup, pour l'affichage.
+    dernierCoup: null,
+  }
+}
+
+// --- Gestes --------------------------------------------------------------
+
+// Le coup : glisser un bloc de la grille de dx cases (négatif vers la gauche).
+// Les blocs dans le chemin sont poussés tant qu'il reste de la place au bout
+// de la rangée ; sinon le geste est refusé (null).
+// Défauts à confirmer en jouant : un glisser de plusieurs cases compte pour un
+// seul coup, et un glisser qui ramène le bloc à sa place (dx = 0) n'en est pas un.
+export function jouer(etat, id, dx) {
+  if (etat.finie) return null
+  const bloc = etat.blocs.find((b) => b.id === id)
+  if (!bloc) return null
+  if (dx === 0) return etat
+
+  const e = cloner(etat)
+  const rangee = e.blocs.filter((b) => b.ligne === bloc.ligne)
+  if (!glisser(rangee, id, dx, e.reglages.colonnes)) return null
+
+  e.coups++
+  e.aVenirDeplace = false
+  const coup = { lignesEffacees: 0, points: 0, secours: null, defaite: false }
+  ajouter(coup, resoudre(e))
+
+  // Secours quand la grille est presque vide (bloc 19 de l'analyse).
+  // Défauts à confirmer : une ligne « restante » est une ligne qui contient au
+  // moins un bloc ; une copie n'est pas un tirage, la file à venir n'avance
+  // donc que d'un cran ; les copies se résolvent comme toute arrivée de ligne.
+  const montees = []
+  const restantes = new Set(e.blocs.map((b) => b.ligne))
+  if (restantes.size === 1) {
+    const [ligne] = restantes
+    coup.secours = 'une ligne'
+    montees.push(copier(e, e.blocs.filter((b) => b.ligne === ligne)))
+  } else if (restantes.size === 0) {
+    coup.secours = 'aucune ligne'
+    montees.push(copier(e, e.aVenir[0]))
+  }
+  montees.push(e.aVenir[0])
+  e.aVenir = [e.aVenir[1], tirerUneLigne(e)]
+
+  for (const ligne of montees) {
+    if (!monterLigne(e, ligne)) {
+      e.finie = true
+      coup.defaite = true
+      break
+    }
+  }
+  if (!e.finie) ajouter(coup, resoudre(e))
+  // La résolution qui suit la montée peut encore vider la grille : même
+  // secours en fin de coup, répété tant qu'il reste moins de 2 lignes occupées.
+  while (!e.finie && lignesOccupees(e) < 2) {
+    const restes = new Set(e.blocs.map((b) => b.ligne))
+    const fin = []
+    if (restes.size === 1) {
+      const [ligne] = restes
+      coup.secours = 'une ligne'
+      fin.push(copier(e, e.blocs.filter((b) => b.ligne === ligne)))
+    } else {
+      coup.secours = 'aucune ligne'
+      fin.push(copier(e, e.aVenir[0]), e.aVenir[0])
+      e.aVenir = [e.aVenir[1], tirerUneLigne(e)]
+    }
+    for (const ligne of fin) {
+      if (!monterLigne(e, ligne)) {
+        e.finie = true
+        coup.defaite = true
+        break
+      }
+    }
+    if (!e.finie) ajouter(coup, resoudre(e))
+  }
+
+  e.score += coup.points
+  e.dernierCoup = coup
+  return e
+}
+
+// Glisser un bloc de la première ligne à venir, avant le coup sur la grille.
+// Ne compte pas comme un coup ; un seul par coup.
+export function deplacerAVenir(etat, id, dx) {
+  if (etat.finie || etat.aVenirDeplace) return null
+  if (!etat.aVenir[0].some((b) => b.id === id)) return null
+  if (dx === 0) return etat
+
+  const e = cloner(etat)
+  if (!glisser(e.aVenir[0], id, dx, e.reglages.colonnes)) return null
+  e.aVenirDeplace = true
+  return e
+}
+
+// --- Lecture, pour l'interface -------------------------------------------
+
+// Jusqu'où un bloc (de la grille ou de la première ligne à venir) peut glisser,
+// en poussant ses voisins : { gauche, droite } en nombre de cases.
+export function deplacementsPossibles(etat, id) {
+  const { colonnes } = etat.reglages
+  const bloc = etat.blocs.find((b) => b.id === id)
+  const rangee = bloc
+    ? etat.blocs.filter((b) => b.ligne === bloc.ligne)
+    : etat.aVenir[0].some((b) => b.id === id) ? etat.aVenir[0] : null
+  if (!rangee) return { gauche: 0, droite: 0 }
+  const pas = (sens) => {
+    const copie = rangee.map((b) => ({ ...b }))
+    let n = 0
+    while (pousserDUneCase(copie, id, sens, colonnes)) n++
+    return n
+  }
+  return { gauche: pas(-1), droite: pas(1) }
+}
+
+// Où seraient les blocs de la rangée si on glissait le bloc de dx cases, sans
+// rien jouer : { id: col } pour tous les blocs de la rangée, ou null si le
+// glisser est refusé faute de place. Sert à montrer les blocs poussés pendant
+// le geste. Marche pour un bloc de la grille comme de la première ligne à venir.
+export function glissement(etat, id, dx) {
+  const bloc = etat.blocs.find((b) => b.id === id)
+  const rangee = bloc
+    ? etat.blocs.filter((b) => b.ligne === bloc.ligne)
+    : etat.aVenir[0].some((b) => b.id === id) ? etat.aVenir[0] : null
+  if (!rangee) return null
+  const copie = rangee.map((b) => ({ ...b }))
+  if (!glisser(copie, id, dx, etat.reglages.colonnes)) return null
+  return Object.fromEntries(copie.map((b) => [b.id, b.col]))
+}
+
+export function blocEn(etat, ligne, col) {
+  return etat.blocs.find((b) => b.ligne === ligne && b.col <= col && col < b.col + b.largeur) ?? null
+}
+
+// La grille case par case : l'id du bloc qui l'occupe, ou null.
+export function grille(etat) {
+  const { lignes, colonnes } = etat.reglages
+  const g = Array.from({ length: lignes }, () => Array(colonnes).fill(null))
+  for (const b of etat.blocs) {
+    for (let c = b.col; c < b.col + b.largeur; c++) g[b.ligne][c] = b.id
+  }
+  return g
+}
+
+// --- Notation texte, pour les tests et le débogage -----------------------
+// Une rangée de 8 caractères : « . » pour une case vide, et chaque bloc écrit
+// par sa largeur répétée. « 22.3331. » : un bloc de 2, un trou, un de 3, un de
+// 1, un trou. « 2222 » se lit donc deux blocs de 2, « 4444 » un bloc de 4.
+
+export function versTexte(etat) {
+  const { lignes, colonnes } = etat.reglages
+  const rangees = Array.from({ length: lignes }, () => Array(colonnes).fill('.'))
+  for (const b of etat.blocs) {
+    for (let c = b.col; c < b.col + b.largeur; c++) rangees[b.ligne][c] = String(b.largeur)
+  }
+  return rangees.map((r) => r.join(''))
+}
+
+export function ligneVersTexte(ligne, colonnes) {
+  const r = Array(colonnes).fill('.')
+  for (const b of ligne) for (let c = b.col; c < b.col + b.largeur; c++) r[c] = String(b.largeur)
+  return r.join('')
+}
+
+// Construit un état depuis la notation texte. Les rangées vont de haut en bas ;
+// s'il en manque, la grille est complétée par des lignes vides en haut.
+export function depuisTexte({ rangees = [], aVenir, reglages = REGLAGES, graine = 1 }) {
+  const e = etatVide(reglages, graine)
+  const decalage = reglages.lignes - rangees.length
+  if (decalage < 0) throw new Error('Trop de rangées pour la grille')
+  rangees.forEach((texte, i) => {
+    for (const b of lireRangee(texte, reglages)) e.blocs.push({ ...b, id: e.prochainId++, ligne: i + decalage })
+  })
+  e.aVenir = aVenir
+    ? aVenir.map((texte) => lireRangee(texte, reglages).map((b) => ({ ...b, id: e.prochainId++ })))
+    : [tirerUneLigne(e), tirerUneLigne(e)]
+  return e
+}
+
+function lireRangee(texte, reglages) {
+  if (texte.length !== reglages.colonnes) throw new Error(`Rangée de ${texte.length} cases : « ${texte} »`)
+  const blocs = []
+  let c = 0
+  while (c < texte.length) {
+    if (texte[c] === '.') { c++; continue }
+    const largeur = Number(texte[c])
+    if (!(largeur >= 1) || texte.slice(c, c + largeur) !== texte[c].repeat(largeur)) {
+      throw new Error(`Bloc mal écrit en colonne ${c} : « ${texte} »`)
+    }
+    blocs.push({ col: c, largeur, couleur: reglages.couleurs[blocs.length % reglages.couleurs.length] })
+    c += largeur
+  }
+  return blocs
+}
+
+// --- Règles --------------------------------------------------------------
+
+function glisser(rangee, id, dx, colonnes) {
+  const sens = Math.sign(dx)
+  for (let i = 0; i < Math.abs(dx); i++) {
+    if (!pousserDUneCase(rangee, id, sens, colonnes)) return false
+  }
+  return true
+}
+
+// Pousse le bloc d'une case et, avec lui, la suite des blocs collés devant
+// lui, si la case au bout de cette suite est libre. Modifie la rangée.
+function pousserDUneCase(rangee, id, sens, colonnes) {
+  const tries = [...rangee].sort((a, b) => a.col - b.col)
+  let i = tries.findIndex((b) => b.id === id)
+  const chaine = [tries[i]]
+  for (;;) {
+    const bout = chaine[chaine.length - 1]
+    const suivant = tries[i + sens]
+    const colle = suivant && (sens > 0 ? suivant.col === bout.col + bout.largeur : suivant.col + suivant.largeur === bout.col)
+    if (!colle) break
+    chaine.push(suivant)
+    i += sens
+  }
+  const bout = chaine[chaine.length - 1]
+  const caseLibre = sens > 0 ? bout.col + bout.largeur : bout.col - 1
+  if (caseLibre < 0 || caseLibre >= colonnes) return false
+  for (const b of chaine) b.col += sens
+  return true
+}
+
+// Gravité puis effacement des lignes pleines, répétés tant que quelque chose
+// bouge ou disparaît. Les points montent avec le rang de chaque ligne effacée
+// dans cette résolution.
+function resoudre(etat) {
+  const bilan = { lignesEffacees: 0, points: 0 }
+  for (;;) {
+    const tombe = appliquerGravite(etat)
+    const effacees = effacerLignesPleines(etat)
+    for (let k = 0; k < effacees; k++) {
+      bilan.lignesEffacees++
+      bilan.points += etat.reglages.pointsLigne(bilan.lignesEffacees, etat.reglages)
+    }
+    if (!tombe && effacees === 0) return bilan
+  }
+}
+
+// Un bloc tombe seulement si toute la place sous lui est vide, sur toute sa
+// largeur : une seule case appuyée suffit à le retenir.
+function appliquerGravite(etat) {
+  const { lignes } = etat.reglages
+  const occupe = new Set()
+  const marquer = (b, oui) => {
+    for (let c = b.col; c < b.col + b.largeur; c++) oui ? occupe.add(`${b.ligne},${c}`) : occupe.delete(`${b.ligne},${c}`)
+  }
+  etat.blocs.forEach((b) => marquer(b, true))
+
+  let bouge = false
+  for (let encore = true; encore; ) {
+    encore = false
+    for (const b of [...etat.blocs].sort((x, y) => y.ligne - x.ligne)) {
+      if (b.ligne === lignes - 1) continue
+      let libre = true
+      for (let c = b.col; c < b.col + b.largeur; c++) if (occupe.has(`${b.ligne + 1},${c}`)) libre = false
+      if (!libre) continue
+      marquer(b, false)
+      b.ligne++
+      marquer(b, true)
+      encore = bouge = true
+    }
+  }
+  return bouge
+}
+
+function effacerLignesPleines(etat) {
+  const remplies = new Map()
+  for (const b of etat.blocs) remplies.set(b.ligne, (remplies.get(b.ligne) ?? 0) + b.largeur)
+  const pleines = new Set([...remplies].filter(([, n]) => n === etat.reglages.colonnes).map(([l]) => l))
+  if (pleines.size) etat.blocs = etat.blocs.filter((b) => !pleines.has(b.ligne))
+  return pleines.size
+}
+
+// Fait monter une ligne par le bas. Refuse (false) si un bloc occupe la ligne
+// du haut : il serait poussé hors de la grille, la partie est perdue.
+function monterLigne(etat, ligne) {
+  if (etat.blocs.some((b) => b.ligne === 0)) return false
+  for (const b of etat.blocs) b.ligne--
+  for (const b of ligne) etat.blocs.push({ ...b, ligne: etat.reglages.lignes - 1 })
+  return true
+}
+
+function lignesOccupees(etat) {
+  return new Set(etat.blocs.map((b) => b.ligne)).size
+}
+
+function copier(etat, blocs) {
+  return blocs.map(({ col, largeur, couleur }) => ({ id: etat.prochainId++, col, largeur, couleur }))
+}
+
+function tirerUneLigne(etat) {
+  const { reglages } = etat
+  const ligne = reglages.tirage(() => aleatoire(etat), reglages)
+  let fin = 0
+  for (const b of [...ligne].sort((x, y) => x.col - y.col)) {
+    if (b.col < fin || b.largeur < 1 || b.col + b.largeur > reglages.colonnes) {
+      throw new Error('Le tirage a rendu une ligne invalide')
+    }
+    fin = b.col + b.largeur
+  }
+  return ligne.map(({ col, largeur, couleur }) => ({ id: etat.prochainId++, col, largeur, couleur }))
+}
+
+// Générateur reproductible (mulberry32) : sa graine vit dans l'état, qui reste
+// ainsi un objet simple qu'on peut enregistrer et rejouer.
+function aleatoire(etat) {
+  let t = (etat.hasard = (etat.hasard + 0x6d2b79f5) >>> 0)
+  t = Math.imul(t ^ (t >>> 15), t | 1)
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+}
+
+function cloner(etat) {
+  return {
+    ...etat,
+    blocs: etat.blocs.map((b) => ({ ...b })),
+    aVenir: etat.aVenir.map((l) => l.map((b) => ({ ...b }))),
+  }
+}
+
+function ajouter(coup, bilan) {
+  coup.lignesEffacees += bilan.lignesEffacees
+  coup.points += bilan.points
+}

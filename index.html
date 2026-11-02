@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#3a4f8c">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Block slid">
+  <title>Block slid</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="app">
+    <header id="haut">
+      <div id="meilleur" aria-label="Meilleur score">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 14.9V17h3v2h1v2H7v-2h1v-2h3v-2.1A5 5 0 0 1 8.3 12H8a4 4 0 0 1-4-4V5h3V3Zm-1 4v1a2 2 0 0 0 1.2 1.8A6 6 0 0 1 7 8V7H6Zm12 0h-1v1a6 6 0 0 1-.2 1.8A2 2 0 0 0 18 8V7Z"/></svg>
+        <span id="meilleur-score">0</span>
+      </div>
+      <button id="reglages-ouvrir" type="button" aria-label="Réglages">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6a.5.5 0 0 0 .1-.6l-2-3.5a.5.5 0 0 0-.6-.2l-2.5 1a7.3 7.3 0 0 0-1.7-1l-.4-2.6a.5.5 0 0 0-.5-.4h-4a.5.5 0 0 0-.5.4l-.4 2.6a7.3 7.3 0 0 0-1.7 1l-2.5-1a.5.5 0 0 0-.6.2l-2 3.5a.5.5 0 0 0 .1.6L4.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6a.5.5 0 0 0-.1.6l2 3.5c.1.2.4.3.6.2l2.5-1c.5.4 1.1.7 1.7 1l.4 2.6c0 .2.3.4.5.4h4c.2 0 .5-.2.5-.4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1c.2.1.5 0 .6-.2l2-3.5a.5.5 0 0 0-.1-.6L19.4 13ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"/></svg>
+      </button>
+      <div id="score" aria-live="off" aria-label="Score">0</div>
+    </header>
+
+    <div id="zone">
+      <div id="plateau" role="application" aria-label="Grille de jeu">
+        <div id="fond"></div>
+        <div id="blocs"></div>
+        <div id="zone-avenir"></div>
+      </div>
+    </div>
+
+    <div id="fin" class="voile" hidden>
+      <div class="fenetre" role="dialog" aria-modal="true" aria-labelledby="fin-titre">
+        <h2 id="fin-titre">Perdu</h2>
+        <p id="fin-score"></p>
+        <p id="fin-record" hidden>Nouveau meilleur score !</p>
+        <button id="fin-rejouer" class="gros" type="button">Rejouer</button>
+      </div>
+    </div>
+
+    <div id="reglages" class="voile" hidden>
+      <div class="fenetre" role="dialog" aria-modal="true" aria-labelledby="reglages-titre">
+        <button id="reglages-fermer" class="croix" type="button" aria-label="Fermer">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19" /></svg>
+        </button>
+        <h2 id="reglages-titre">Réglages</h2>
+
+        <div class="reglage">
+          <label for="vibration">Vibration</label>
+          <div class="curseur">
+            <button id="vibration-moins" type="button" aria-label="Moins de vibration">−</button>
+            <input id="vibration" type="range" min="0" max="5" step="1" value="2">
+            <button id="vibration-plus" type="button" aria-label="Plus de vibration">+</button>
+          </div>
+          <p id="vibration-etat" aria-live="polite"></p>
+        </div>
+
+        <button id="rejouer" class="gros" type="button">Rejouer</button>
+
+        <div id="installation" hidden>
+          <button id="installer" type="button" hidden>Installer l'application</button>
+          <p id="aide-installation" hidden></p>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
