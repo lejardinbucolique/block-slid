@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { partie, resume } from './partie-type.js'
+import { partie, resume, SANS_FIGURES } from './partie-type.js'
 import {
   nouvellePartie,
   jouer,
@@ -11,7 +11,7 @@ import {
 } from '../src/moteur/index.js'
 
 // Passe par du vrai texte JSON, comme le fait localStorage.
-const viaTexte = (etat) => importerPartie(JSON.parse(JSON.stringify(exporterPartie(etat))))
+const viaTexte = (etat, reglages = etat.reglages) => importerPartie(JSON.parse(JSON.stringify(exporterPartie(etat))), reglages)
 
 test('partie gardée : à chaque coup, la reprise donne exactement la suite de la partie d\'origine', () => {
   let coups = 0

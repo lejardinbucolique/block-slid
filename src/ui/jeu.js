@@ -10,6 +10,7 @@
 // (dernierCoup.etapes) et l'écran les pose un par un, chacun pendant sa durée.
 
 import {
+  REGLAGES,
   nouvellePartie,
   exporterPartie,
   importerPartie,
@@ -18,6 +19,8 @@ import {
   deplacementsPossibles,
   glissement,
   blocEn,
+  tailleFigure,
+  changerReglages,
 } from '../moteur/index.js'
 import {
   NIVEAUX_VIBRATION,
@@ -25,6 +28,8 @@ import {
   retenirMeilleurScore,
   niveauVibration,
   retenirNiveauVibration,
+  figuresActivees,
+  retenirFiguresActivees,
   partieGardee,
   garderPartie,
   oublierPartie,
@@ -48,8 +53,12 @@ const DUREES_MS = {
   secours: 320, // la copie apparaît
   montee: 300, // la ligne à venir monte
   defaite: 350,
+  figure: 600, // le carré de la figure s'allume (réussie) ou se renouvelle (expirée)
 }
 const DUREE_POINTS_MS = 900 // le « +10 » qui monte depuis la ligne effacée
+const DUREE_GAIN_MS = 1200 // le bonus d'une figure réussie, au milieu de la grille
+const REGLAGES_SANS_FIGURES = Object.freeze({ ...REGLAGES, figures: null })
+const reglagesPour = (figures) => (figures ? REGLAGES : REGLAGES_SANS_FIGURES)
 const ELASTIQUE_MAX_PX = 7
 
 const $ = (id) => document.getElementById(id)
@@ -63,11 +72,15 @@ export function demarrerJeu() {
   const zoneAvenir = $('zone-avenir')
   const scoreEl = $('score')
   const meilleurEl = $('meilleur-score')
+  const figureEl = $('figure')
+  const carreEl = $('figure-carre')
+  const bonusEl = $('figure-bonus')
 
   // La partie gardée se reprend telle quelle, sauf si elle est perdue ou
   // illisible (autre version du jeu) : alors une nouvelle partie commence.
-  const gardee = importerPartie(partieGardee())
-  let etat = gardee && !gardee.finie ? gardee : nouvellePartie()
+  let figures = figuresActivees()
+  const gardee = importerPartie(partieGardee(), reglagesPour(figures))
+  let etat = gardee && !gardee.finie ? gardee : nouvellePartie({ reglages: reglagesPour(figures) })
   let meilleur = meilleurScore()
   let niveau = niveauVibration()
   let geste = null
@@ -77,6 +90,7 @@ export function demarrerJeu() {
   const moinsDeMouvement = window.matchMedia?.('(prefers-reduced-motion: reduce)')
   let g = { cw: 0, ch: 0, ph: 0 }
   const elements = new Map() // id du bloc -> { el }
+  let figureMontree = null // la figure dont le modèle est posé dans le carré
 
   // --- Mise en page -------------------------------------------------------
 
@@ -172,6 +186,58 @@ export function demarrerJeu() {
       for (const l of vue.lignes) pointsFlottants(l)
     }
     afficherScore(vue.score)
+    if (!vue.anime) afficherFigure()
+  }
+
+  // Le modèle de la figure à droite du score, et son bonus. Pendant un coup qui
+  // la termine, on garde l'ancienne figure et l'ancien bonus jusqu'à la fin.
+  function afficherFigure(figure = etat.figure, bonus = etat.bonus) {
+    figureEl.hidden = !etat.reglages.figures
+    figureEl.classList.toggle('vide', !figure)
+    bonusEl.textContent = figure ? String(bonus) : '–'
+    figureEl.title = figure ? `Figure à composer : bonus ${bonus}` : ''
+    if (figure === figureMontree) return
+    const apparait = figure && !figureMontree
+    figureMontree = figure
+    carreEl.textContent = ''
+    if (!figure) return
+    // Une figure proposée après un moment sans figure : courte apparition.
+    if (apparait && !moinsDeMouvement?.matches) {
+      figureEl.classList.remove('apparait')
+      void figureEl.offsetWidth
+      figureEl.classList.add('apparait')
+    }
+    const { lignes, colonnes } = tailleFigure(figure)
+    const grille = document.createElement('div')
+    grille.className = 'fig-grille'
+    grille.style.setProperty('--n', String(Math.max(lignes, colonnes, 3)))
+    grille.style.setProperty('--cols', String(colonnes))
+    grille.style.setProperty('--lignes', String(lignes))
+    for (const c of figure.cases) {
+      const el = document.createElement('div')
+      el.className = 'fig-case'
+      el.dataset.couleur = c.couleur.replace(/\s+/g, '-')
+      el.style.gridArea = `${c.ligne + 1} / ${c.col + 1}`
+      grille.appendChild(el)
+    }
+    carreEl.appendChild(grille)
+  }
+
+  // Figure réussie : le carré s'allume et le bonus monte ; expirée : le carré se renouvelle.
+  function animerFigure({ issue, gain }) {
+    if (moinsDeMouvement?.matches) return
+    figureEl.style.setProperty('--duree-figure', `${DUREES_MS.figure}ms`)
+    figureEl.classList.remove('gagne', 'expire')
+    void figureEl.offsetWidth
+    figureEl.classList.add(issue === 'reussie' ? 'gagne' : 'expire')
+    if (issue !== 'reussie') return
+    const el = document.createElement('div')
+    el.className = 'points gain'
+    el.textContent = `+${gain}`
+    el.style.top = `${(etat.reglages.lignes / 2) * g.ch}px`
+    el.style.width = `${plateau.clientWidth}px`
+    conteneur.appendChild(el)
+    setTimeout(() => el.remove(), DUREE_GAIN_MS)
   }
 
   function pointsFlottants({ ligne, points }) {
@@ -219,9 +285,12 @@ export function demarrerJeu() {
   // Pose les étapes l'une après l'autre. L'état du moteur est déjà le final :
   // seul l'affichage prend son temps, et peut être coupé à tout moment.
   function lireCoup(etapes) {
-    let score = etat.score - etat.dernierCoup.points
+    const figure = etat.dernierCoup.figure
+    let score = etat.score - etat.dernierCoup.points - (figure?.gain ?? 0)
     let i = 0
-    lecture = { minuteur: null }
+    lecture = { minuteur: null, figure: figure?.issue ? figure : null }
+    if (figure?.issue) afficherFigure(figure.avant, figure.bonusAvant)
+    else afficherFigure()
     const suite = () => {
       if (i >= etapes.length) return conclure()
       const etape = etapes[i++]
@@ -248,6 +317,7 @@ export function demarrerJeu() {
   // est posé et, si c'est perdu, « Perdu » ne vient qu'après.
   function conclure({ coupe = false } = {}) {
     clearTimeout(lecture?.minuteur)
+    const figure = lecture?.figure
     lecture = null
     if (coupe) {
       for (const el of partants) el.remove()
@@ -257,6 +327,7 @@ export function demarrerJeu() {
       afficher({ animer: false })
     }
     plateau.style.removeProperty('--duree')
+    if (figure) animerFigure(figure)
     if (etat.finie && minuteurFin === null) minuteurFin = setTimeout(afficherFin, DELAI_FIN_MS)
   }
 
@@ -402,7 +473,7 @@ export function demarrerJeu() {
     geste = null
     fin.hidden = true
     reglages.hidden = true
-    etat = nouvellePartie()
+    etat = nouvellePartie({ reglages: reglagesPour(figures) })
     garder()
     sansAnimation(() => {
       for (const rec of elements.values()) rec.el.remove()
@@ -442,6 +513,17 @@ export function demarrerJeu() {
   curseur.addEventListener('change', () => vibrer(niveau))
   $('vibration-moins').addEventListener('click', () => changerVibration(niveau - 1, true))
   $('vibration-plus').addEventListener('click', () => changerVibration(niveau + 1, true))
+
+  const caseFigures = $('figures-actives')
+  caseFigures.checked = figures
+  caseFigures.addEventListener('change', () => {
+    figures = caseFigures.checked
+    retenirFiguresActivees(figures)
+    if (lecture) conclure({ coupe: true })
+    etat = changerReglages(etat, reglagesPour(figures))
+    garder()
+    afficherFigure()
+  })
 
   function ouvrirReglages() {
     if (!fin.hidden) return

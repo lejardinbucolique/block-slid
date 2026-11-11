@@ -3,6 +3,30 @@
 
 import { tirerLigne } from './tirage.js'
 
+// Figures à composer avec des cases seules (BS10). `figures: null` dans les
+// réglages coupe tout : ni figure, ni bonus, ni tirage consommé.
+export const FIGURES = Object.freeze({
+  // Bonus de départ selon le nombre de cases de la figure ; defauts à confirmer
+  // en jouant. Une figure est tirée dans un palier (casesMin à casesMax cases),
+  // puis le palier baisse tant que les petits blocs visibles ne la permettent pas.
+  paliers: Object.freeze([
+    Object.freeze({ casesMin: 3, casesMax: 4, bonus: 3000 }),
+    Object.freeze({ casesMin: 5, casesMax: 6, bonus: 5000 }),
+    Object.freeze({ casesMin: 7, casesMax: 10, bonus: 10000 }),
+  ]),
+  // Une ligne de la figure : jamais pleine (elle disparaîtrait avant d'être vue).
+  casesMaxParLigne: 7,
+  lignesMax: 2,
+  // Cases vides permises au plus à l'intérieur d'une ligne de la figure.
+  trousMax: 2,
+  // Couleurs différentes au plus dans une même figure.
+  couleursMax: 3,
+  // Ce que perd le bonus à chaque coup sur la grille.
+  perteParCoup: 100,
+  // Essais par palier avant de passer à un palier plus petit.
+  essais: 40,
+})
+
 export const REGLAGES = Object.freeze({
   // Grille : ligne du haut comprise, et utilisable (seule une ligne qui
   // monte en poussant un bloc hors de la grille fait perdre).
@@ -35,4 +59,6 @@ export const REGLAGES = Object.freeze({
   // qu'elles disparaissent ensemble ou en chaîne.
   pointsParLigne: 10,
   pointsLigne: (rang, reglages) => reglages.pointsParLigne * rang,
+
+  figures: FIGURES,
 })

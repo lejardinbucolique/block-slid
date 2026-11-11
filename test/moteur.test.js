@@ -1,10 +1,10 @@
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
-import { partie, resume, empreinte } from './partie-type.js'
+import { partie, resume, empreinte, SANS_FIGURES } from './partie-type.js'
 import assert from 'node:assert/strict'
 import {
   REGLAGES,
-  nouvellePartie,
+  nouvellePartie as nouvelle,
   jouer,
   deplacerAVenir,
   deplacementsPossibles,
@@ -21,7 +21,9 @@ function tirageFixe(aleatoire, reglages) {
   return depuisTexte({ rangees: [LIGNE_TIREE], aVenir: [], reglages: { ...reglages, tirage: () => [] } }).blocs
     .map(({ col, largeur, couleur }) => ({ col, largeur, couleur }))
 }
-const PETITE = { ...REGLAGES, lignes: 6, tirage: tirageFixe }
+const PETITE = { ...REGLAGES, lignes: 6, tirage: tirageFixe, figures: null }
+// Ces tests éprouvent les règles d'avant les figures (BS10) : elles sont coupées.
+const nouvellePartie = (options = {}) => nouvelle({ reglages: SANS_FIGURES, ...options })
 
 function position(rangees, aVenir = [LIGNE_TIREE, '1.1.1.1.'], reglages = PETITE) {
   return depuisTexte({ rangees, aVenir, reglages })

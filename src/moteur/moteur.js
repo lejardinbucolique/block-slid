@@ -13,8 +13,15 @@
 // 'glisse' (le geste du joueur), 'complete' (lignes pleines, encore en place :
 // lignes = [{ ligne, points }]), 'efface' (ces lignes ont disparu), 'chute',
 // 'secours' (la copie apparaît, hors grille : copies), 'montee' et 'defaite'.
+//
+// Figures (BS10) : l'état porte une figure à composer et son bonus, qui baisse
+// de reglages.figures.perteParCoup à chaque coup sur la grille. Quand la figure
+// est dans la grille, le bonus qui reste s'ajoute au score ; quand il tombe à 0,
+// elle expire ; dans les deux cas une nouvelle est proposée. Le résumé est dans
+// dernierCoup.figure. Avec reglages.figures = null, rien de tout cela n'existe.
 
 import { REGLAGES } from './reglages.js'
+import { figurePresente, proposerFigure } from './figures.js'
 
 // --- Partie --------------------------------------------------------------
 
@@ -30,6 +37,7 @@ export function nouvellePartie({ graine = Date.now(), reglages = REGLAGES } = {}
   }
   etat.score = 0
   etat.aVenir = [tirerUneLigne(etat), tirerUneLigne(etat)]
+  nouvelleFigure(etat)
   return etat
 }
 
@@ -46,6 +54,10 @@ function etatVide(reglages, graine) {
     aVenirDeplace: false,
     hasard: graine >>> 0,
     prochainId: 1,
+    // La figure à composer : { cases: [{ ligne, col, couleur }], depart }, et le
+    // bonus qu'elle rapporterait maintenant. Null sans figures (ou faute de place).
+    figure: null,
+    bonus: 0,
     // Ce qu'a produit le dernier coup, pour l'affichage.
     dernierCoup: null,
   }
@@ -55,7 +67,8 @@ function etatVide(reglages, graine) {
 
 // Change quand la forme des données gardées change : une partie gardée avec un
 // autre numéro n'est plus relue.
-export const SCHEMA_PARTIE = 1
+// Le 1 (sans figure) se relit : la partie reprend avec une figure neuve.
+export const SCHEMA_PARTIE = 2
 
 // L'état d'une partie en données simples (JSON), sans `reglages` (il contient
 // une fonction) ni `dernierCoup` (utile au seul affichage du coup qui vient d'être joué).
@@ -72,6 +85,14 @@ export function exporterPartie(etat) {
     aVenirDeplace: etat.aVenirDeplace,
     hasard: etat.hasard,
     prochainId: etat.prochainId,
+    // Les figures étaient-elles actives ? Sans figure gardée, cela distingue « aucune
+    // ne convenait » (on n'en tire pas) de « figures coupées » (on en tire une à la reprise).
+    figures: Boolean(etat.reglages.figures),
+    figure: etat.figure && {
+      cases: etat.figure.cases.map((c) => ({ ligne: c.ligne, col: c.col, couleur: c.couleur })),
+      depart: etat.figure.depart,
+    },
+    bonus: etat.bonus,
   }
 }
 
@@ -87,7 +108,7 @@ export function importerPartie(donnees, reglages = REGLAGES) {
 }
 
 function lirePartie(d, reglages) {
-  if (!d || typeof d !== 'object' || d.schema !== SCHEMA_PARTIE) return null
+  if (!d || typeof d !== 'object' || (d.schema !== SCHEMA_PARTIE && d.schema !== 1)) return null
   const { lignes, colonnes } = reglages
   const entier = (n, min, max = Number.MAX_SAFE_INTEGER) => Number.isInteger(n) && n >= min && n <= max
   if (!entier(d.score, 0) || !entier(d.coups, 0) || !entier(d.hasard, 0, 0xffffffff) || !entier(d.prochainId, 1)) return null
@@ -121,6 +142,13 @@ function lirePartie(d, reglages) {
   }
   if (!aVenir.every(sansChevauchement)) return null
 
+  // La figure gardée n'est relue que si les figures sont actives ; sinon, ou si
+  // la partie n'en avait pas (autre version, figures coupées), une neuve est tirée.
+  const avaitFigures = d.schema === SCHEMA_PARTIE && d.figures === true
+  if (d.schema === SCHEMA_PARTIE && typeof d.figures !== 'boolean') return null
+  const figure = reglages.figures && avaitFigures ? lireFigure(d, reglages, entier) : null
+  if (figure === undefined) return null
+
   const e = etatVide(reglages, d.hasard)
   e.blocs = blocs
   e.aVenir = aVenir
@@ -129,6 +157,53 @@ function lirePartie(d, reglages) {
   e.finie = d.finie
   e.aVenirDeplace = d.aVenirDeplace
   e.prochainId = d.prochainId
+  if (figure) { e.figure = figure; e.bonus = d.bonus }
+  else if (reglages.figures && !(avaitFigures && d.figure === null)) nouvelleFigure(e)
+  return e
+}
+
+// La figure gardée : null s'il n'y en avait pas, undefined si elle est invalide.
+function lireFigure(d, reglages, entier) {
+  if (d.figure === null || d.figure === undefined) return null
+  const f = d.figure
+  if (typeof f !== 'object' || !Array.isArray(f.cases) || f.cases.length === 0) return undefined
+  if (!entier(f.depart, 1) || !entier(d.bonus, 0, f.depart)) return undefined
+  const { colonnes } = reglages
+  const vues = new Set()
+  for (const c of f.cases) {
+    if (!c || typeof c !== 'object') return undefined
+    if (!entier(c.ligne, 0, reglages.figures.lignesMax - 1) || !entier(c.col, 0, colonnes - 1)) return undefined
+    if (typeof c.couleur !== 'string' || !reglages.couleurs.includes(c.couleur)) return undefined
+    const cle = `${c.ligne},${c.col}`
+    if (vues.has(cle)) return undefined
+    vues.add(cle)
+  }
+  // Rangée du haut et colonne de gauche occupées : sinon la figure serait décalée.
+  if (!f.cases.some((c) => c.ligne === 0) || !f.cases.some((c) => c.col === 0)) return undefined
+  return { cases: f.cases.map((c) => ({ ligne: c.ligne, col: c.col, couleur: c.couleur })), depart: f.depart }
+}
+
+// Propose une figure (neuve) et son bonus de départ, d'après la grille et les
+// lignes à venir ; aucune si les figures sont coupées ou qu'aucune ne convient.
+function nouvelleFigure(etat) {
+  etat.figure = etat.reglages.figures
+    ? proposerFigure(etat.blocs, etat.aVenir, etat.reglages, () => aleatoire(etat))
+    : null
+  etat.bonus = etat.figure ? etat.figure.depart : 0
+}
+
+// Applique d'autres réglages à une partie en cours, sans la perdre : couper les
+// figures retire la figure et le bonus, les activer en propose une neuve.
+export function changerReglages(etat, reglages) {
+  if (reglages === etat.reglages) return etat
+  const e = cloner(etat)
+  e.reglages = reglages
+  if (!reglages.figures) {
+    e.figure = null
+    e.bonus = 0
+  } else if (!etat.reglages.figures) {
+    nouvelleFigure(e)
+  }
   return e
 }
 
@@ -152,7 +227,7 @@ export function jouer(etat, id, dx) {
   e.coups++
   e.aVenirDeplace = false
   const etapes = [instantane(e, 'glisse')]
-  const coup = { lignesEffacees: 0, points: 0, secours: null, defaite: false, etapes }
+  const coup = { lignesEffacees: 0, points: 0, secours: null, defaite: false, etapes, figure: null }
   ajouter(coup, resoudre(e, etapes))
 
   // Secours quand la grille est presque vide (bloc 19 de l'analyse).
@@ -195,9 +270,36 @@ export function jouer(etat, id, dx) {
     if (monterLignes(e, fin, coup)) ajouter(coup, resoudre(e, etapes))
   }
 
-  e.score += coup.points
+  coup.figure = jouerFigure(e)
+  e.score += coup.points + (coup.figure?.gain ?? 0)
   e.dernierCoup = coup
   return e
+}
+
+// Fin d'un coup : le bonus perd sa part, puis on regarde si la figure est dans
+// la grille. Rend le résumé { issue, gain, avant, nouvelle } : issue vaut
+// 'reussie' (gain = le bonus qui restait), 'expiree' (bonus à 0, ou figure
+// faite trop tard pour rapporter) ou null ; null sans figures.
+function jouerFigure(e) {
+  const cfg = e.reglages.figures
+  if (!cfg) return null
+  const avant = e.figure
+  const bonusAvant = e.bonus
+  let issue = null
+  let gain = 0
+  if (e.figure) {
+    e.bonus = Math.max(0, e.bonus - cfg.perteParCoup)
+    if (figurePresente(e.figure, e.blocs)) {
+      gain = e.bonus
+      issue = gain > 0 ? 'reussie' : 'expiree'
+    } else if (e.bonus === 0) {
+      issue = 'expiree'
+    }
+  }
+  // Une nouvelle figure quand l'ancienne est finie, ou qu'il n'y en avait pas
+  // (aucune ne convenait au coup d'avant).
+  if (issue || !e.figure) nouvelleFigure(e)
+  return { issue, gain, avant, bonusAvant, nouvelle: e.figure }
 }
 
 // Glisser un bloc de la première ligne à venir, avant le coup sur la grille.
@@ -284,8 +386,14 @@ export function ligneVersTexte(ligne, colonnes) {
 
 // Construit un état depuis la notation texte. Les rangées vont de haut en bas ;
 // s'il en manque, la grille est complétée par des lignes vides en haut.
-export function depuisTexte({ rangees = [], aVenir, reglages = REGLAGES, graine = 1 }) {
+// `figure` (et son `bonus`, par défaut le bonus de départ) pose une figure ; sans
+// elle, la position n'en a pas, même si les réglages ont les figures.
+export function depuisTexte({ rangees = [], aVenir, reglages = REGLAGES, graine = 1, figure = null, bonus }) {
   const e = etatVide(reglages, graine)
+  if (figure) {
+    e.figure = figure
+    e.bonus = bonus ?? figure.depart
+  }
   const decalage = reglages.lignes - rangees.length
   if (decalage < 0) throw new Error('Trop de rangées pour la grille')
   rangees.forEach((texte, i) => {

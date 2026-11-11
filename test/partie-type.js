@@ -1,5 +1,9 @@
 // Parties jouées par programme, déterministes, pour comparer des versions du moteur.
-import { nouvellePartie, jouer, deplacerAVenir, deplacementsPossibles, versTexte } from '../src/moteur/index.js'
+import { REGLAGES, nouvellePartie, jouer, deplacerAVenir, deplacementsPossibles, versTexte } from '../src/moteur/index.js'
+
+// Les parties de référence (points normaux, tirage) se jouent sans figures : le
+// tirage des figures consomme le hasard de la partie (BS10).
+export const SANS_FIGURES = Object.freeze({ ...REGLAGES, figures: null })
 
 function prng(graine) {
   let s = graine >>> 0
@@ -19,9 +23,9 @@ export function empreinte(texte) {
 
 // Joue une partie de la graine donnée ; rend, coup après coup, l'état et son
 // résumé (grille, score, file à venir, hasard).
-export function* partie(graine, maxCoups = 150) {
+export function* partie(graine, maxCoups = 150, reglages = SANS_FIGURES) {
   const alea = prng(graine * 7919 + 13)
-  let etat = nouvellePartie({ graine })
+  let etat = nouvellePartie({ graine, reglages })
   for (let n = 0; n < maxCoups && !etat.finie; n++) {
     if (!etat.aVenirDeplace && alea() < 0.3) {
       const b = etat.aVenir[0][Math.floor(alea() * etat.aVenir[0].length)]

@@ -38,8 +38,8 @@ button { font: inherit; color: inherit; }
 #haut {
   flex: none;
   display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-areas: "meilleur reglages" "score score";
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-areas: "meilleur . reglages" ". score figure";
   align-items: center;
   padding: 6px 14px 0;
 }
@@ -58,6 +58,7 @@ button { font: inherit; color: inherit; }
 
 #reglages-ouvrir {
   grid-area: reglages;
+  justify-self: end;
   width: 46px;
   height: 46px;
   padding: 8px;
@@ -78,6 +79,65 @@ button { font: inherit; color: inherit; }
   text-shadow: 0 3px 0 rgba(0, 0, 0, .28);
 }
 #score.saut { animation: saut .25s ease-out; }
+
+/* La figure à composer : son modèle en petit, et le bonus qu'elle rapporte. */
+#figure {
+  grid-area: figure;
+  --fig: clamp(46px, 12.5vw, 58px);
+  justify-self: end;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+#figure[hidden] { display: none; }
+
+#figure-carre {
+  width: var(--fig);
+  height: var(--fig);
+  display: grid;
+  place-items: center;
+  background: var(--grille);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, .35);
+}
+/* Sans figure, rien ne se montre, mais la place reste prise : l'en-tête ne bouge pas. */
+#figure.vide { visibility: hidden; }
+#figure.apparait { animation: figure-apparait .3s ease-out; }
+@keyframes figure-apparait { from { opacity: 0; transform: scale(.7); } }
+
+.fig-grille {
+  /* --n : le plus grand côté de la figure, en cases ; la figure tient dans le carré. */
+  --cell: calc((var(--fig) - 10px) / var(--n));
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--cell));
+  grid-template-rows: repeat(var(--lignes), var(--cell));
+  gap: 1px;
+}
+.fig-case {
+  border-radius: 2px;
+  background: linear-gradient(160deg, var(--c1), var(--c2));
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, .45), inset -1px -1px 0 rgba(0, 0, 0, .3);
+}
+
+#figure-bonus {
+  font-size: .85rem;
+  line-height: 1.1;
+  font-weight: 800;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .28);
+}
+/* --duree-figure : posée par jeu.js (DUREES_MS.figure). */
+#figure.gagne { animation: figure-gagne var(--duree-figure, .6s) ease-out; }
+#figure.expire { animation: figure-expire var(--duree-figure, .6s) ease-out; }
+@keyframes figure-gagne {
+  30% { transform: scale(1.25); filter: brightness(1.6); }
+}
+@keyframes figure-expire {
+  from { opacity: .2; transform: scale(.6); }
+}
 @keyframes saut { 40% { transform: scale(1.12); } }
 
 /* --- Plateau --------------------------------------------------------------- */
@@ -135,13 +195,13 @@ button { font: inherit; color: inherit; }
   transition: filter .2s, opacity .2s;
 }
 
-.bloc[data-couleur="jaune"] { --c1: #ffd93a; --c2: #f0b800; }
-.bloc[data-couleur="orange"] { --c1: #ffab3d; --c2: #ee7d10; }
-.bloc[data-couleur="rouge"] { --c1: #ff6459; --c2: #d93027; }
-.bloc[data-couleur="vert"] { --c1: #6fdc5e; --c2: #36a933; }
-.bloc[data-couleur="bleu"] { --c1: #4d8cff; --c2: #1f56c9; }
-.bloc[data-couleur="bleu-clair"] { --c1: #66dcff; --c2: #1fb0e0; }
-.bloc[data-couleur="violet"] { --c1: #b772f0; --c2: #8035c4; }
+[data-couleur="jaune"] { --c1: #ffd93a; --c2: #f0b800; }
+[data-couleur="orange"] { --c1: #ffab3d; --c2: #ee7d10; }
+[data-couleur="rouge"] { --c1: #ff6459; --c2: #d93027; }
+[data-couleur="vert"] { --c1: #6fdc5e; --c2: #36a933; }
+[data-couleur="bleu"] { --c1: #4d8cff; --c2: #1f56c9; }
+[data-couleur="bleu-clair"] { --c1: #66dcff; --c2: #1fb0e0; }
+[data-couleur="violet"] { --c1: #b772f0; --c2: #8035c4; }
 
 /* Pendant le geste : suit le doigt de près, sans la glissade lente. */
 .bloc.glisse { transition: transform .07s linear, height .3s ease; }
@@ -178,6 +238,14 @@ button { font: inherit; color: inherit; }
 
 /* Le secours : la copie apparaît d'un temps net ; la ligne à venir lui laisse la place. */
 .bloc.cache > i { opacity: 0; }
+
+/* Le bonus d'une figure réussie : monte depuis le milieu de la grille. */
+.points.gain {
+  margin-top: 0;
+  font-size: calc(var(--ch) * 1.5);
+  color: #fff;
+  animation-duration: 1.2s;
+}
 
 /* Les points qui montent depuis une ligne effacée. */
 .points {
@@ -264,6 +332,9 @@ button { font: inherit; color: inherit; }
 .reglage label { font-weight: 700; font-size: 1.1rem; }
 .reglage p { font-size: .9rem; opacity: .85; min-height: 1.2em; }
 
+.interrupteur { display: flex; align-items: center; justify-content: center; gap: .7rem; min-height: 44px; }
+.interrupteur input { flex: none; width: 28px; height: 28px; margin: 0; accent-color: var(--accent); }
+
 .curseur { display: flex; align-items: center; gap: .6rem; }
 .curseur input[type="range"] { flex: 1; min-width: 0; height: 36px; accent-color: var(--accent); }
 .curseur button {
@@ -300,7 +371,7 @@ button { font: inherit; color: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   .bloc { transition-duration: .01s; }
-  .bloc > i, #score.saut { animation-duration: .01s; }
+  .bloc > i, #score.saut, #figure.gagne, #figure.expire, #figure.apparait { animation-duration: .01s; }
 }
 
 #version { font-size: .8rem; opacity: .6; text-align: center; min-height: 1em; }

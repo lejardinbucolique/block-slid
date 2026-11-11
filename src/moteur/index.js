@@ -1,4 +1,5 @@
-export { REGLAGES } from './reglages.js'
+export { REGLAGES, FIGURES } from './reglages.js'
+export { tailleFigure, figurePresente, proposerFigure, bonusDepart } from './figures.js'
 export { tirerLigne } from './tirage.js'
 export {
   nouvellePartie,
@@ -14,4 +15,5 @@ export {
   versTexte,
   ligneVersTexte,
   depuisTexte,
+  changerReglages,
 } from './moteur.js'

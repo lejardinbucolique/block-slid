@@ -1,11 +1,12 @@
-// Ce qui reste sur l'appareil : le meilleur score, le niveau de vibration et la
-// partie en cours.
+// Ce qui reste sur l'appareil : le meilleur score, le niveau de vibration, le
+// choix des figures et la partie en cours.
 // Le stockage peut manquer ou refuser (navigation privée) : le jeu marche alors
 // sans rien retenir.
 
 const CLE_MEILLEUR = 'block-slid.meilleur'
 const CLE_VIBRATION = 'block-slid.vibration'
 const CLE_PARTIE = 'block-slid.partie'
+const CLE_FIGURES = 'block-slid.figures'
 
 function lire(cle) {
   try { return localStorage.getItem(cle) } catch { return null }
@@ -32,6 +33,10 @@ export const retenirMeilleurScore = (score) => ecrire(CLE_MEILLEUR, score)
 export const NIVEAUX_VIBRATION = Object.freeze([0, 10, 20, 35, 60, 100])
 export const niveauVibration = () => entier(lire(CLE_VIBRATION), 2, 0, NIVEAUX_VIBRATION.length - 1)
 export const retenirNiveauVibration = (niveau) => ecrire(CLE_VIBRATION, niveau)
+
+// Les figures à composer (BS10) : actives tant qu'on ne les a pas coupées.
+export const figuresActivees = () => lire(CLE_FIGURES) !== '0'
+export const retenirFiguresActivees = (actif) => ecrire(CLE_FIGURES, actif ? '1' : '0')
 
 // La partie en cours, en données simples (exporterPartie), sans date limite :
 // elle reste jusqu'à ce qu'elle se termine ou qu'on en commence une autre.
