@@ -94,22 +94,19 @@ button { font: inherit; color: inherit; }
 #figure[hidden] { display: none; }
 
 #figure-carre {
-  width: var(--fig);
-  height: var(--fig);
+  /* Un rectangle : la figure fait 6 ou 7 colonnes sur 2 lignes (BS12). */
+  width: calc(var(--fig) * 1.3);
+  height: calc(var(--fig) * .55);
   display: grid;
   place-items: center;
   background: var(--grille);
   border-radius: 8px;
   box-shadow: inset 0 0 0 2px rgba(0, 0, 0, .35);
 }
-/* Sans figure, rien ne se montre, mais la place reste prise : l'en-tête ne bouge pas. */
-#figure.vide { visibility: hidden; }
-#figure.apparait { animation: figure-apparait .3s ease-out; }
-@keyframes figure-apparait { from { opacity: 0; transform: scale(.7); } }
 
 .fig-grille {
-  /* --n : le plus grand côté de la figure, en cases ; la figure tient dans le carré. */
-  --cell: calc((var(--fig) - 10px) / var(--n));
+  /* --cols : la largeur de la figure, en cases ; elle tient dans le carré. */
+  --cell: min(calc((var(--fig) * 1.3 - 10px) / var(--cols)), calc((var(--fig) * .55 - 8px) / var(--lignes)));
   display: grid;
   grid-template-columns: repeat(var(--cols), var(--cell));
   grid-template-rows: repeat(var(--lignes), var(--cell));
@@ -371,7 +368,7 @@ button { font: inherit; color: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   .bloc { transition-duration: .01s; }
-  .bloc > i, #score.saut, #figure.gagne, #figure.expire, #figure.apparait { animation-duration: .01s; }
+  .bloc > i, #score.saut, #figure.gagne, #figure.expire { animation-duration: .01s; }
 }
 
 #version { font-size: .8rem; opacity: .6; text-align: center; min-height: 1em; }

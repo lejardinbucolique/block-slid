@@ -19,9 +19,17 @@
 // est dans la grille, le bonus qui reste s'ajoute au score ; quand il tombe à 0,
 // elle expire ; dans les deux cas une nouvelle est proposée. Le résumé est dans
 // dernierCoup.figure. Avec reglages.figures = null, rien de tout cela n'existe.
+//
+// BS12 : une figure est toujours proposée (figures.js), ses couleurs tirées
+// librement. BS15 : ce sont les lignes qui s'adaptent à elle ; tant qu'elle est en
+// cours, les lignes qui arrivent gardent leur forme, seuls leurs blocs d'une case
+// sont recolorés vers ses couleurs (tirage.js). Figures et recoloriage tirent un
+// hasard à part, qui n'avance pas celui des lignes : pour une même graine et les
+// mêmes gestes, les lignes ont la même forme avec ou sans figures.
 
 import { REGLAGES } from './reglages.js'
-import { figurePresente, proposerFigure } from './figures.js'
+import { recolorerLigne } from './tirage.js'
+import { figurePresente, proposerFigure, motifFigure, figureValide } from './figures.js'
 
 // --- Partie --------------------------------------------------------------
 
@@ -55,7 +63,7 @@ function etatVide(reglages, graine) {
     hasard: graine >>> 0,
     prochainId: 1,
     // La figure à composer : { cases: [{ ligne, col, couleur }], depart }, et le
-    // bonus qu'elle rapporterait maintenant. Null sans figures (ou faute de place).
+    // bonus qu'elle rapporterait maintenant. Null seulement si les figures sont coupées.
     figure: null,
     bonus: 0,
     // Ce qu'a produit le dernier coup, pour l'affichage.
@@ -67,8 +75,9 @@ function etatVide(reglages, graine) {
 
 // Change quand la forme des données gardées change : une partie gardée avec un
 // autre numéro n'est plus relue.
-// Le 1 (sans figure) se relit : la partie reprend avec une figure neuve.
-export const SCHEMA_PARTIE = 2
+// Le 1 (sans figure) et le 2 (figures de BS10, petites, à paliers) se relisent :
+// la partie reprend avec une figure neuve du modèle de BS12.
+export const SCHEMA_PARTIE = 3
 
 // L'état d'une partie en données simples (JSON), sans `reglages` (il contient
 // une fonction) ni `dernierCoup` (utile au seul affichage du coup qui vient d'être joué).
@@ -85,9 +94,6 @@ export function exporterPartie(etat) {
     aVenirDeplace: etat.aVenirDeplace,
     hasard: etat.hasard,
     prochainId: etat.prochainId,
-    // Les figures étaient-elles actives ? Sans figure gardée, cela distingue « aucune
-    // ne convenait » (on n'en tire pas) de « figures coupées » (on en tire une à la reprise).
-    figures: Boolean(etat.reglages.figures),
     figure: etat.figure && {
       cases: etat.figure.cases.map((c) => ({ ligne: c.ligne, col: c.col, couleur: c.couleur })),
       depart: etat.figure.depart,
@@ -108,7 +114,7 @@ export function importerPartie(donnees, reglages = REGLAGES) {
 }
 
 function lirePartie(d, reglages) {
-  if (!d || typeof d !== 'object' || (d.schema !== SCHEMA_PARTIE && d.schema !== 1)) return null
+  if (!d || typeof d !== 'object' || ![1, 2, SCHEMA_PARTIE].includes(d.schema)) return null
   const { lignes, colonnes } = reglages
   const entier = (n, min, max = Number.MAX_SAFE_INTEGER) => Number.isInteger(n) && n >= min && n <= max
   if (!entier(d.score, 0) || !entier(d.coups, 0) || !entier(d.hasard, 0, 0xffffffff) || !entier(d.prochainId, 1)) return null
@@ -144,9 +150,7 @@ function lirePartie(d, reglages) {
 
   // La figure gardée n'est relue que si les figures sont actives ; sinon, ou si
   // la partie n'en avait pas (autre version, figures coupées), une neuve est tirée.
-  const avaitFigures = d.schema === SCHEMA_PARTIE && d.figures === true
-  if (d.schema === SCHEMA_PARTIE && typeof d.figures !== 'boolean') return null
-  const figure = reglages.figures && avaitFigures ? lireFigure(d, reglages, entier) : null
+  const figure = reglages.figures && d.schema === SCHEMA_PARTIE ? lireFigure(d, reglages, entier) : null
   if (figure === undefined) return null
 
   const e = etatVide(reglages, d.hasard)
@@ -158,7 +162,7 @@ function lirePartie(d, reglages) {
   e.aVenirDeplace = d.aVenirDeplace
   e.prochainId = d.prochainId
   if (figure) { e.figure = figure; e.bonus = d.bonus }
-  else if (reglages.figures && !(avaitFigures && d.figure === null)) nouvelleFigure(e)
+  else if (reglages.figures) nouvelleFigure(e)
   return e
 }
 
@@ -172,23 +176,21 @@ function lireFigure(d, reglages, entier) {
   const vues = new Set()
   for (const c of f.cases) {
     if (!c || typeof c !== 'object') return undefined
-    if (!entier(c.ligne, 0, reglages.figures.lignesMax - 1) || !entier(c.col, 0, colonnes - 1)) return undefined
+    if (!entier(c.ligne, 0, 1) || !entier(c.col, 0, colonnes - 1)) return undefined
     if (typeof c.couleur !== 'string' || !reglages.couleurs.includes(c.couleur)) return undefined
     const cle = `${c.ligne},${c.col}`
     if (vues.has(cle)) return undefined
     vues.add(cle)
   }
-  // Rangée du haut et colonne de gauche occupées : sinon la figure serait décalée.
-  if (!f.cases.some((c) => c.ligne === 0) || !f.cases.some((c) => c.col === 0)) return undefined
-  return { cases: f.cases.map((c) => ({ ligne: c.ligne, col: c.col, couleur: c.couleur })), depart: f.depart }
+  // Ligne du bas pleine, ligne du haut posée dessus, de la bonne forme.
+  const figure = { cases: f.cases.map((c) => ({ ligne: c.ligne, col: c.col, couleur: c.couleur })), depart: f.depart }
+  return figureValide(figure, reglages.figures) ? figure : undefined
 }
 
-// Propose une figure (neuve) et son bonus de départ, d'après la grille et les
-// lignes à venir ; aucune si les figures sont coupées ou qu'aucune ne convient.
+// Propose une figure (neuve) et son bonus de départ ; aucune seulement si les
+// figures sont coupées.
 function nouvelleFigure(etat) {
-  etat.figure = etat.reglages.figures
-    ? proposerFigure(etat.blocs, etat.aVenir, etat.reglages, () => aleatoire(etat))
-    : null
+  etat.figure = etat.reglages.figures ? proposerFigure(etat.blocs, etat.reglages, hasardAPart(etat, 1)) : null
   etat.bonus = etat.figure ? etat.figure.depart : 0
 }
 
@@ -289,16 +291,15 @@ function jouerFigure(e) {
   let gain = 0
   if (e.figure) {
     e.bonus = Math.max(0, e.bonus - cfg.perteParCoup)
-    if (figurePresente(e.figure, e.blocs)) {
+    if (figurePresente(e.figure, e.blocs, e.reglages.lignes, e.reglages.colonnes)) {
       gain = e.bonus
       issue = gain > 0 ? 'reussie' : 'expiree'
     } else if (e.bonus === 0) {
       issue = 'expiree'
     }
   }
-  // Une nouvelle figure quand l'ancienne est finie, ou qu'il n'y en avait pas
-  // (aucune ne convenait au coup d'avant).
-  if (issue || !e.figure) nouvelleFigure(e)
+  // Une nouvelle figure quand l'ancienne est finie.
+  if (issue) nouvelleFigure(e)
   return { issue, gain, avant, bonusAvant, nouvelle: e.figure }
 }
 
@@ -479,28 +480,23 @@ function resoudre(etat, etapes = null) {
 }
 
 // Un bloc tombe seulement si toute la place sous lui est vide, sur toute sa
-// largeur : une seule case appuyée suffit à le retenir.
+// largeur : une seule case appuyée suffit à le retenir. Les blocs sont posés de
+// bas en haut, chacun aussi bas qu'il peut descendre : le résultat est celui d'une
+// chute pas à pas.
 function appliquerGravite(etat) {
-  const { lignes } = etat.reglages
-  const occupe = new Set()
-  const marquer = (b, oui) => {
-    for (let c = b.col; c < b.col + b.largeur; c++) oui ? occupe.add(`${b.ligne},${c}`) : occupe.delete(`${b.ligne},${c}`)
-  }
-  etat.blocs.forEach((b) => marquer(b, true))
-
+  const { lignes, colonnes } = etat.reglages
+  const occupe = new Uint8Array(lignes * colonnes)
   let bouge = false
-  for (let encore = true; encore; ) {
-    encore = false
-    for (const b of [...etat.blocs].sort((x, y) => y.ligne - x.ligne)) {
-      if (b.ligne === lignes - 1) continue
+  for (const b of [...etat.blocs].sort((x, y) => y.ligne - x.ligne)) {
+    let ligne = b.ligne
+    while (ligne < lignes - 1) {
       let libre = true
-      for (let c = b.col; c < b.col + b.largeur; c++) if (occupe.has(`${b.ligne + 1},${c}`)) libre = false
-      if (!libre) continue
-      marquer(b, false)
-      b.ligne++
-      marquer(b, true)
-      encore = bouge = true
+      for (let c = b.col; c < b.col + b.largeur; c++) if (occupe[(ligne + 1) * colonnes + c]) { libre = false; break }
+      if (!libre) break
+      ligne++
     }
+    if (ligne !== b.ligne) { b.ligne = ligne; bouge = true }
+    for (let c = b.col; c < b.col + b.largeur; c++) occupe[ligne * colonnes + c] = 1
   }
   return bouge
 }
@@ -570,7 +566,9 @@ function copier(etat, blocs) {
 
 function tirerUneLigne(etat) {
   const { reglages } = etat
-  const ligne = reglages.tirage(() => aleatoire(etat), reglages)
+  let ligne = reglages.tirage(() => aleatoire(etat), reglages)
+  const voulues = couleursVoulues(etat)
+  if (voulues) ligne = recolorerLigne(ligne, voulues.liste, voulues.hasard)
   let fin = 0
   for (const b of [...ligne].sort((x, y) => x.col - y.col)) {
     if (b.col < fin || b.largeur < 1 || b.col + b.largeur > reglages.colonnes) {
@@ -579,6 +577,44 @@ function tirerUneLigne(etat) {
     fin = b.col + b.largeur
   }
   return ligne.map(({ col, largeur, couleur }) => ({ id: etat.prochainId++, col, largeur, couleur }))
+}
+
+// Les couleurs vers lesquelles recolorer les blocs d'une case de la prochaine
+// ligne (BS15) : 1 bloc ou plus (reglages.figures.recolores), de celles dont il
+// manque le plus (blocs d'une case de la couleur, grille et lignes à venir,
+// contre ce que demandent les cases des deux lignes de la figure). Null sans
+// figure. Rend aussi le hasard à part qui sert au recoloriage.
+function couleursVoulues(etat) {
+  const cfg = etat.reglages.figures
+  const motif = cfg && etat.figure && motifFigure(etat.figure)
+  if (!motif) return null
+  const manque = new Map()
+  for (const couleur of motif.couleurs) manque.set(couleur, (manque.get(couleur) ?? 0) + 1)
+  const compter = (b) => { if (b.largeur === 1 && manque.has(b.couleur)) manque.set(b.couleur, manque.get(b.couleur) - 1) }
+  etat.blocs.forEach(compter)
+  etat.aVenir.forEach((l) => l.forEach(compter))
+  const hasard = hasardAPart(etat, 2)
+  const n = cfg.recolores.blocs + (hasard() < cfg.recolores.chancePlus ? 1 : 0)
+  const liste = []
+  for (let i = 0; i < n; i++) {
+    let meilleure = null
+    for (const [couleur, reste] of manque) if (meilleure === null || reste > manque.get(meilleure)) meilleure = couleur
+    liste.push(meilleure)
+    manque.set(meilleure, manque.get(meilleure) - 1)
+  }
+  return { liste, hasard }
+}
+
+// Un hasard à part (BS15), tiré de l'état sans l'avancer : reproductible, il
+// laisse au hasard de la partie exactement les tirages d'avant les figures.
+function hasardAPart(etat, sel) {
+  let s = (Math.imul(etat.hasard ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(etat.prochainId + sel * 0x10001, 0xc2b2ae35)) >>> 0
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0
+    let t = Math.imul(s ^ (s >>> 15), s | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
 }
 
 // Générateur reproductible (mulberry32) : sa graine vit dans l'état, qui reste

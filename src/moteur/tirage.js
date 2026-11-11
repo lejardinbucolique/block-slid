@@ -55,6 +55,38 @@ function disposer(aleatoire, reglages, blocs, trous) {
   return ligne
 }
 
+// Recoloriage vers une figure (BS15, remplace la poussée de BS12 et BS13) : la
+// ligne tirée garde sa forme (nombre, largeur et place des blocs) ; seuls ses
+// blocs d'une case peuvent changer de couleur, un par couleur de `voulues` (une
+// couleur répétée en demande autant). Un bloc d'une case déjà de la bonne couleur
+// compte. Une ligne sans bloc d'une case reste telle quelle. Deux blocs collés de
+// même couleur se confondraient à l'écran : on les évite quand on peut.
+export function recolorerLigne(ligne, voulues, aleatoire) {
+  const blocs = ligne.map((b) => ({ ...b }))
+  const reserves = new Set()
+  const manque = []
+  for (const couleur of voulues) {
+    const deja = blocs.find((b) => b.largeur === 1 && b.couleur === couleur && !reserves.has(b))
+    if (deja) reserves.add(deja)
+    else manque.push(couleur)
+  }
+  for (const couleur of manque) {
+    const seuls = blocs.filter((b) => b.largeur === 1 && !reserves.has(b))
+    const sansVoisin = seuls.filter((b) => !voisins(blocs, b).some((v) => v.couleur === couleur))
+    const choix = sansVoisin.length ? sansVoisin : seuls
+    if (!choix.length) break
+    const bloc = choix[Math.floor(aleatoire() * choix.length)]
+    bloc.couleur = couleur
+    reserves.add(bloc)
+  }
+  return blocs
+}
+
+// Les blocs qui touchent celui-ci (collés à gauche ou à droite).
+function voisins(blocs, b) {
+  return blocs.filter((v) => v !== b && (v.col + v.largeur === b.col || b.col + b.largeur === v.col))
+}
+
 function tirerCouleur(aleatoire, couleurs, interdite) {
   const permises = couleurs.length > 1 ? couleurs.filter((c) => c !== interdite) : couleurs
   return permises[Math.floor(aleatoire() * permises.length)]

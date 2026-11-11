@@ -192,25 +192,20 @@ export function demarrerJeu() {
   // Le modèle de la figure à droite du score, et son bonus. Pendant un coup qui
   // la termine, on garde l'ancienne figure et l'ancien bonus jusqu'à la fin.
   function afficherFigure(figure = etat.figure, bonus = etat.bonus) {
-    figureEl.hidden = !etat.reglages.figures
-    figureEl.classList.toggle('vide', !figure)
-    bonusEl.textContent = figure ? String(bonus) : '–'
-    figureEl.title = figure ? `Figure à composer : bonus ${bonus}` : ''
+    // Sans figure, seulement quand les figures sont coupées : rien à montrer.
+    figureEl.hidden = !figure
+    if (!figure) {
+      figureMontree = null
+      return
+    }
+    bonusEl.textContent = String(bonus)
+    figureEl.title = `Figure à composer : bonus ${bonus}`
     if (figure === figureMontree) return
-    const apparait = figure && !figureMontree
     figureMontree = figure
     carreEl.textContent = ''
-    if (!figure) return
-    // Une figure proposée après un moment sans figure : courte apparition.
-    if (apparait && !moinsDeMouvement?.matches) {
-      figureEl.classList.remove('apparait')
-      void figureEl.offsetWidth
-      figureEl.classList.add('apparait')
-    }
     const { lignes, colonnes } = tailleFigure(figure)
     const grille = document.createElement('div')
     grille.className = 'fig-grille'
-    grille.style.setProperty('--n', String(Math.max(lignes, colonnes, 3)))
     grille.style.setProperty('--cols', String(colonnes))
     grille.style.setProperty('--lignes', String(lignes))
     for (const c of figure.cases) {

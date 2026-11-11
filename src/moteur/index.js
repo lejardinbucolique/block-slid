@@ -1,5 +1,5 @@
 export { REGLAGES, FIGURES } from './reglages.js'
-export { tailleFigure, figurePresente, proposerFigure, bonusDepart } from './figures.js'
+export { tailleFigure, figurePresente, proposerFigure, motifFigure, figureValide } from './figures.js'
 export { tirerLigne } from './tirage.js'
 export {
   nouvellePartie,

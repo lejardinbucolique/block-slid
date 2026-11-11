@@ -3,28 +3,32 @@
 
 import { tirerLigne } from './tirage.js'
 
-// Figures à composer avec des cases seules (BS10). `figures: null` dans les
-// réglages coupe tout : ni figure, ni bonus, ni tirage consommé.
+// Figures à composer (BS10, refaites en BS12, élargies en BS14) : une ligne du bas de
+// 6 ou 7 blocs d'une seule case d'affilée, et une ligne du haut posée dessus, soit
+// complète (deux lignes identiques), soit incomplète ; 1 à 3 couleurs en tout.
+// Une figure est toujours proposée, construite pour être faisable (rien en l'air,
+// et les lignes qui arrivent recolorent discrètement leurs blocs d'une case vers
+// ses couleurs, tirées librement). `figures: null` dans
+// les réglages coupe tout : ni figure, ni bonus, ni recoloriage.
 export const FIGURES = Object.freeze({
-  // Bonus de départ selon le nombre de cases de la figure ; defauts à confirmer
-  // en jouant. Une figure est tirée dans un palier (casesMin à casesMax cases),
-  // puis le palier baisse tant que les petits blocs visibles ne la permettent pas.
-  paliers: Object.freeze([
-    Object.freeze({ casesMin: 3, casesMax: 4, bonus: 3000 }),
-    Object.freeze({ casesMin: 5, casesMax: 6, bonus: 5000 }),
-    Object.freeze({ casesMin: 7, casesMax: 10, bonus: 10000 }),
-  ]),
-  // Une ligne de la figure : jamais pleine (elle disparaîtrait avant d'être vue).
-  casesMaxParLigne: 7,
-  lignesMax: 2,
-  // Cases vides permises au plus à l'intérieur d'une ligne de la figure.
-  trousMax: 2,
-  // Couleurs différentes au plus dans une même figure.
-  couleursMax: 3,
+  // Bonus de départ, le même pour toutes les figures.
+  bonusDepart: 10000,
   // Ce que perd le bonus à chaque coup sur la grille.
   perteParCoup: 100,
-  // Essais par palier avant de passer à un palier plus petit.
-  essais: 40,
+  // Largeur du motif, en colonnes (jamais la grille entière : la ligne disparaîtrait).
+  largeurs: Object.freeze([6, 7]),
+  // Ligne du haut incomplète (BS14) : au moins `min` cases, au plus `trousMax` trous
+  // entre sa première et sa dernière case, aux couleurs libres dans la palette de la
+  // figure. `chanceIncomplete` : la part des figures qui en ont une (sinon, deux lignes
+  // identiques). Défaut à confirmer en jouant.
+  haut: Object.freeze({ min: 4, trousMax: 2, chanceIncomplete: 0.5 }),
+  // Couleurs différentes au plus dans une même figure.
+  couleursMax: 3,
+  // Recoloriage (BS15) : les lignes qui arrivent gardent la forme tirée ; parmi
+  // leurs seuls blocs d'une case, jusqu'à `blocs` prennent les couleurs qui
+  // manquent le plus à la figure, un de plus avec la chance `chancePlus`. La
+  // poussée de BS12 et BS13, qui coupait des blocs larges, changeait la difficulté.
+  recolores: Object.freeze({ blocs: 1, chancePlus: 0.5 }),
 })
 
 export const REGLAGES = Object.freeze({
