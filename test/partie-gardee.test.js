@@ -5,6 +5,7 @@ import {
   nouvellePartie,
   jouer,
   deplacerAVenir,
+  deplacementsPossibles,
   exporterPartie,
   importerPartie,
   REGLAGES,
@@ -29,17 +30,43 @@ test('partie gardée : à chaque coup, la reprise donne exactement la suite de l
   assert.ok(coups > 5000, `seulement ${coups} coups éprouvés`)
 })
 
-test('partie gardée : la ligne à venir déplacée se retrouve, avec son indicateur', () => {
+test('partie gardée : les lignes à venir déplacées se retrouvent, et se déplacent encore', () => {
   let e = nouvellePartie({ graine: 7 })
-  const b = e.aVenir[0].find((x) => x.col > 0) ?? e.aVenir[0][0]
-  for (const dx of [-1, 1]) {
-    const suivant = deplacerAVenir(e, b.id, dx)
-    if (suivant) { e = suivant; break }
+  let deplacements = 0
+  for (const rang of [0, 1, 0, 1, 1]) {
+    for (const b of e.aVenir[rang]) {
+      const suivant = [-1, 1].map((dx) => deplacerAVenir(e, b.id, dx)).find(Boolean)
+      if (suivant) { e = suivant; deplacements++; break }
+    }
   }
+  assert.ok(deplacements >= 4, `seulement ${deplacements} déplacements`)
   const repris = viaTexte(e)
-  assert.equal(repris.aVenirDeplace, e.aVenirDeplace)
   assert.deepEqual(repris.aVenir, e.aVenir)
-  assert.equal(deplacerAVenir(repris, b.id, 1), null, 'un seul déplacement par coup, même après reprise')
+  assert.equal('aVenirDeplace' in repris, false)
+  assert.equal('aVenirDeplace' in exporterPartie(e), false)
+  for (const rang of [0, 1]) {
+    const ok = repris.aVenir[rang].some((b) => [-1, 1].some((dx) => deplacerAVenir(repris, b.id, dx)))
+    assert.ok(ok, `la ligne ${rang + 1} se déplace encore après la reprise`)
+  }
+})
+
+test('partie gardée : une partie gardée avant BS17 (avec aVenirDeplace) se rouvre, le champ est ignoré', () => {
+  const e = nouvellePartie({ graine: 21 })
+  for (const ancien of [true, false]) {
+    const donnees = JSON.parse(JSON.stringify(exporterPartie(e)))
+    donnees.aVenirDeplace = ancien
+    const repris = importerPartie(donnees)
+    assert.ok(repris, `aVenirDeplace = ${ancien}`)
+    assert.deepEqual(exporterPartie(repris), exporterPartie(e))
+    assert.equal('aVenirDeplace' in repris, false)
+    // Même une ligne déjà déplacée dans l'ancien jeu se déplace encore.
+    const b = repris.aVenir[0].find((x) => deplacementsPossibles(repris, x.id).droite > 0)
+    assert.ok(b && deplacerAVenir(repris, b.id, 1))
+  }
+  // Un champ absent (partie gardée après BS17) est lu tout autant.
+  const sans = JSON.parse(JSON.stringify(exporterPartie(e)))
+  assert.equal('aVenirDeplace' in sans, false)
+  assert.ok(importerPartie(sans))
 })
 
 test('partie gardée : les données ne contiennent que du JSON simple', () => {

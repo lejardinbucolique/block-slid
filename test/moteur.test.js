@@ -125,19 +125,152 @@ test("un bloc peut occuper la ligne du haut sans faire perdre tant qu'aucune lig
   assert.notEqual(deplacementsPossibles(e, idEn(e, 0, 0)).droite, 0)
 })
 
-test('ligne à venir : un déplacement par coup, sans compter comme un coup, et seulement sur la première', () => {
+const aVenirTexte = (e) => e.aVenir.map((l) => ligneVersTexte(l, 8))
+
+test('lignes à venir : déplacements libres et sans limite, sur les deux lignes, sans compter comme un coup', () => {
   const e = position(['1122....', '4444.22.'], ['333.333.', '1.1.1.1.'])
-  assert.equal(deplacerAVenir(e, e.aVenir[1][0].id, 1), null)
 
-  const a = deplacerAVenir(e, e.aVenir[0][0].id, 1)
-  assert.equal(ligneVersTexte(a.aVenir[0], 8), '.333333.')
+  // Première ligne, plusieurs fois de suite.
+  let a = deplacerAVenir(e, e.aVenir[0][0].id, 1)
+  assert.deepEqual(aVenirTexte(a), ['.333333.', '1.1.1.1.'])
+  a = deplacerAVenir(a, a.aVenir[0][1].id, -1)
+  assert.deepEqual(aVenirTexte(a), ['333333..', '1.1.1.1.'])
+  a = deplacerAVenir(a, a.aVenir[0][0].id, 1)
+  assert.deepEqual(aVenirTexte(a), ['.333333.', '1.1.1.1.'])
+
+  // Deuxième ligne : un bloc pousse ses voisins, sur plusieurs cases d'un geste.
+  a = deplacerAVenir(a, a.aVenir[1][0].id, 2)
+  assert.deepEqual(aVenirTexte(a), ['.333333.', '..111.1.'])
+  a = deplacerAVenir(a, a.aVenir[1][3].id, -1)
+  assert.deepEqual(aVenirTexte(a), ['.333333.', '..1111..'])
+
+  // Rien n'est compté, ni la grille ni le score ni le bonus ne bougent.
   assert.equal(a.coups, 0)
-  assert.equal(deplacerAVenir(a, a.aVenir[0][1].id, 1), null)
+  assert.equal(a.score, e.score)
+  assert.equal(a.bonus, e.bonus)
+  assert.deepEqual(versTexte(a), versTexte(e))
+  assert.equal(a.hasard, e.hasard)
+  assert.equal(a.prochainId, e.prochainId)
+  assert.equal('aVenirDeplace' in a, false)
+})
 
-  const b = jouer(a, idEn(a, 4, 0), 1)
-  assert.equal(versTexte(b)[5], '.333333.')
-  assert.equal(b.coups, 1)
-  assert.notEqual(deplacerAVenir(b, b.aVenir[0][0].id, 1), null)
+test('lignes à venir : refus sans place, bloc inconnu, partie finie ; dx = 0 ne change rien', () => {
+  const e = position(['1122....', '4444.22.'], ['333333..', '11111111'])
+  assert.equal(deplacerAVenir(e, e.aVenir[1][0].id, 1), null, 'ligne pleine')
+  assert.equal(deplacerAVenir(e, e.aVenir[0][0].id, -1), null, 'contre le bord')
+  assert.equal(deplacerAVenir(e, e.aVenir[0][0].id, 3), null, 'trop loin')
+  assert.notEqual(deplacerAVenir(e, e.aVenir[0][0].id, 1), null)
+  assert.equal(deplacerAVenir(e, 9999, 1), null)
+  assert.equal(deplacerAVenir(e, idEn(e, 4, 0), 1), null, 'un bloc de la grille se joue avec jouer')
+  assert.equal(deplacerAVenir(e, e.aVenir[1][2].id, 0), e)
+  assert.equal(deplacerAVenir({ ...e, finie: true }, e.aVenir[0][0].id, 1), null)
+})
+
+test('lignes à venir : lecture des déplacements possibles et du glissement pour les deux lignes', () => {
+  const e = position(['1122....', '4444.22.'], ['333.333.', '1.1.1.1.'])
+  const premiere = e.aVenir[0]
+  const seconde = e.aVenir[1]
+  assert.deepEqual(deplacementsPossibles(e, premiere[0].id), { gauche: 0, droite: 2 })
+  assert.deepEqual(deplacementsPossibles(e, premiere[1].id), { gauche: 1, droite: 1 })
+  assert.deepEqual(deplacementsPossibles(e, seconde[0].id), { gauche: 0, droite: 4 })
+  assert.deepEqual(deplacementsPossibles(e, seconde[3].id), { gauche: 3, droite: 1 })
+
+  const g = glissement(e, seconde[0].id, 2)
+  assert.deepEqual(g, { [seconde[0].id]: 2, [seconde[1].id]: 3, [seconde[2].id]: 4, [seconde[3].id]: 6 })
+  assert.equal(glissement(e, seconde[0].id, -1), null)
+  assert.equal(glissement(e, premiere[0].id, 3), null)
+  // Lecture seule : l'état n'a pas bougé.
+  assert.deepEqual(aVenirTexte(e), ['333.333.', '1.1.1.1.'])
+})
+
+test("lignes à venir : la deuxième ligne arrangée garde sa disposition en montant en première place", () => {
+  const e = position(['1122....', '4444.22.'], ['333.333.', '1.1.1.1.'])
+  let a = deplacerAVenir(e, e.aVenir[1][0].id, 2)
+  a = deplacerAVenir(a, a.aVenir[1][3].id, -1)
+  assert.deepEqual(aVenirTexte(a), ['333.333.', '..1111..'])
+  const ids = a.aVenir[1].map((b) => b.id)
+
+  const apres = jouer(a, idEn(a, 4, 0), 1)
+  assert.equal(apres.coups, 1)
+  assert.equal(ligneVersTexte(apres.aVenir[0], 8), '..1111..', 'passe en première place telle qu\'arrangée')
+  assert.deepEqual(apres.aVenir[0].map((b) => b.id), ids, 'les mêmes blocs')
+  assert.equal(versTexte(apres)[5], '333.333.', 'la première ligne arrangée est montée dans la grille')
+  // Et elle se déplace encore, comme toute première ligne.
+  assert.notEqual(deplacerAVenir(apres, apres.aVenir[0][0].id, 1), null)
+})
+
+test('lignes à venir : la copie de secours reprend la ligne telle qu\'elle est arrangée', () => {
+  const e = position(['1.......', '4444.22.'], ['333.333.', '1.1.1.1.'])
+  const arrange = deplacerAVenir(e, e.aVenir[0][0].id, 1)
+  assert.equal(ligneVersTexte(arrange.aVenir[0], 8), '.333333.')
+  const apres = jouer(arrange, idEn(arrange, 4, 0), 4)
+  assert.equal(apres.dernierCoup.secours, 'une ligne')
+  assert.equal(ligneVersTexte(apres.aVenir[0], 8), '1.1.1.1.')
+
+  // Grille vidée : la copie est celle de la première ligne à venir, arrangée.
+  const vide = position(['..1.1...', '221.4444', '1111.111'], ['333.333.', '1.1.1.1.'])
+  const arrange2 = deplacerAVenir(vide, vide.aVenir[0][0].id, 1)
+  assert.equal(ligneVersTexte(arrange2.aVenir[0], 8), '.333333.')
+  const fini = jouer(arrange2, idEn(arrange2, 3, 2), 1)
+  assert.equal(fini.dernierCoup.secours, 'aucune ligne')
+  assert.deepEqual(versTexte(fini).slice(3), ['........', '.333333.', '.333333.'])
+})
+
+// BS17 : déplacer des blocs n'utilise aucun hasard, donc les lignes qui arrivent
+// ne dépendent pas de la façon dont les lignes à venir ont été arrangées.
+test('lignes à venir : arrangées ou non, les lignes qui arrivent sont les mêmes (même graine, mêmes coups)', () => {
+  let comparees = 0
+  for (const reglages of [SANS_FIGURES, REGLAGES]) {
+    for (let graine = 1; graine <= 60; graine++) {
+      let libre = nouvelle({ graine, reglages })
+      let n = 0
+      for (let tour = 0; tour < 25 && !libre.finie; tour++) {
+        // Chaque tour repart du même état : on arrange au hasard, de façon
+        // reproductible, plusieurs fois les deux lignes de la copie.
+        let arrange = libre
+        for (let k = 0; k < 6; k++) {
+          const rang = (graine + tour + k) % 2
+          const ligne = arrange.aVenir[rang]
+          const b = ligne[(graine * 3 + tour + k) % ligne.length]
+          const p = deplacementsPossibles(arrange, b.id)
+          const dx = (tour + k) % 2 ? p.droite : -p.gauche
+          const suivant = dx ? deplacerAVenir(arrange, b.id, dx) : null
+          if (suivant) { arrange = suivant; n++ }
+        }
+        // Arranger n'utilise aucun hasard et ne touche à rien d'autre que les deux lignes.
+        assert.equal(arrange.hasard, libre.hasard, `graine ${graine}, tour ${tour}`)
+        assert.equal(arrange.prochainId, libre.prochainId)
+        assert.equal(arrange.coups, libre.coups)
+        assert.equal(arrange.score, libre.score)
+        assert.equal(arrange.bonus, libre.bonus)
+        assert.deepEqual(versTexte(arrange), versTexte(libre))
+        // Le coup sur la grille est le même (la grille n'a pas été touchée).
+        const coup = libre.blocs
+          .map((b) => ({ b, p: deplacementsPossibles(libre, b.id) }))
+          .find(({ p }) => p.gauche || p.droite)
+        if (!coup) break
+        const dx = coup.p.droite ? 1 : -1
+        const suite = jouer(libre, coup.b.id, dx)
+        arrange = jouer(arrange, coup.b.id, dx)
+        libre = suite
+        assert.ok(libre && arrange)
+        // Les formes de la ligne montée sont celles d'avant : seule sa disposition change.
+        const formes = (l) => l.map((b) => b.largeur).sort().join()
+        assert.equal(formes(arrange.aVenir[0]), formes(libre.aVenir[0]))
+        // Grille et lignes montées diffèrent (une ligne arrangée peut en effacer une autre,
+        // ou non), mais tant qu'aucun secours ne tire de ligne en plus, le coup tire une
+        // seule ligne, strictement la même.
+        if (arrange.dernierCoup.secours === null && libre.dernierCoup.secours === null) {
+          assert.deepEqual(arrange.aVenir[1], libre.aVenir[1], `graine ${graine}, tour ${tour}`)
+          assert.equal(arrange.hasard, libre.hasard)
+          assert.equal(arrange.prochainId, libre.prochainId)
+          comparees++
+        }
+      }
+      assert.ok(n > 0 || libre.finie, `graine ${graine} : aucun arrangement éprouvé`)
+    }
+  }
+  assert.ok(comparees > 1000, `seulement ${comparees} tirages comparés`)
 })
 
 test("position de la capture d'origine : stable, et le coup se joue sans rien faire tomber", () => {

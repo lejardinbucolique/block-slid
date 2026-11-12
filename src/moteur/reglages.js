@@ -24,6 +24,9 @@ export const FIGURES = Object.freeze({
   haut: Object.freeze({ min: 4, trousMax: 2, chanceIncomplete: 0.5 }),
   // Couleurs différentes au plus dans une même figure.
   couleursMax: 3,
+  // Nombre de couleurs d'une figure neuve (BS16) : un poids par nombre. 2 couleurs
+  // le plus souvent ; moins mélangées, les figures sont plus faciles à composer.
+  poidsCouleurs: Object.freeze({ 1: 2, 2: 6, 3: 2 }),
   // Recoloriage (BS15) : les lignes qui arrivent gardent la forme tirée ; parmi
   // leurs seuls blocs d'une case, jusqu'à `blocs` prennent les couleurs qui
   // manquent le plus à la figure, un de plus avec la chance `chancePlus`. La

@@ -118,32 +118,69 @@ export function proposerFigure(blocs, reglages, aleatoire) {
   return figure
 }
 
-// Une figure : la largeur, 1 à 3 couleurs tirées parmi celles du jeu, une couleur de
-// cette palette au hasard pour chaque case de la ligne du bas. Avec la chance
-// `haut.chanceIncomplete`, la ligne du haut est incomplète (taille, place et trous
-// au hasard, couleurs libres dans la palette) ; sinon elle recopie celle du bas.
+// Une figure : la largeur, 1 à 3 couleurs tirées parmi celles du jeu, au poids de
+// `poidsCouleurs` (BS16). Les rangées sont faites de plages : des cases voisines de
+// même couleur, au moins 2 par plage, deux plages voisines de couleurs différentes,
+// au plus 3 plages en bas et 2 en haut. Pas de couleurs alternées case par case, qui
+// demandaient de poser les blocs d'une case dans un ordre exact. Avec la chance
+// `haut.chanceIncomplete`, la ligne du haut est incomplète (taille et place au hasard,
+// d'un seul tenant ou en deux morceaux d'au moins 2 cases séparés par un trou, couleurs
+// libres dans la palette) ; sinon elle recopie celle du bas. `figureValide` ne vérifie
+// pas les plages : les parties gardées avec une figure d'avant se rouvrent telles quelles.
 function composer(reglages, aleatoire) {
   const cfg = reglages.figures
   const entre = (a, b) => a + Math.floor(aleatoire() * (b - a + 1))
   const largeur = cfg.largeurs[entre(0, cfg.largeurs.length - 1)]
-  const palette = melanger(aleatoire, [...reglages.couleurs]).slice(0, entre(1, Math.min(cfg.couleursMax, reglages.couleurs.length)))
-  const couleur = () => palette[entre(0, palette.length - 1)]
-  const bas = Array.from({ length: largeur }, couleur)
+  const max = Math.min(cfg.couleursMax, reglages.couleurs.length, 3)
+  const nb = auPoids(aleatoire, cfg.poidsCouleurs, max)
+  const palette = melanger(aleatoire, [...reglages.couleurs]).slice(0, nb)
+  // Bas : une plage par couleur, ou A B A avec 2 couleurs une fois sur deux.
+  const ordre = nb === 2 && largeur >= 6 && aleatoire() < 0.5 ? [palette[0], palette[1], palette[0]] : palette
+  const bas = plages(aleatoire, largeur, ordre)
   let haut = bas
   if (aleatoire() < cfg.haut.chanceIncomplete) {
-    // n cases sur une étendue de n à n + trousMax colonnes, bornes comprises ; les
-    // trous sont pris parmi les colonnes entre les deux bornes.
     const n = entre(Math.min(cfg.haut.min, largeur - 1), largeur - 1)
-    const etendue = entre(n, Math.min(largeur, n + cfg.haut.trousMax))
-    const debut = entre(0, largeur - etendue)
-    const entres = melanger(aleatoire, Array.from({ length: etendue - 2 }, (_, i) => debut + 1 + i))
-    const trous = new Set(entres.slice(0, etendue - n))
-    haut = bas.map((_, col) => (col >= debut && col < debut + etendue && !trous.has(col) ? couleur() : null))
+    // En deux morceaux (d'au moins 2 cases chacun) quand la place et les trous le permettent.
+    const deux = cfg.haut.trousMax >= 1 && n >= 4 && n + 1 <= largeur && aleatoire() < 0.5
+    const trou = deux ? entre(1, Math.min(cfg.haut.trousMax, largeur - n)) : 0
+    const debut = entre(0, largeur - n - trou)
+    const couleur = () => palette[entre(0, palette.length - 1)]
+    let cellules
+    if (deux) {
+      const g = entre(2, n - 2)
+      const c1 = couleur()
+      const c2 = couleur()
+      cellules = [...Array(g).fill(c1), ...Array(trou).fill(null), ...Array(n - g).fill(c2)]
+    } else {
+      // Un seul tenant : une plage, ou deux de couleurs différentes si la palette le permet.
+      const c1 = couleur()
+      const autres = palette.filter((c) => c !== c1)
+      cellules = autres.length && n >= 4 && aleatoire() < 0.5
+        ? plages(aleatoire, n, [c1, autres[entre(0, autres.length - 1)]])
+        : Array(n).fill(c1)
+    }
+    haut = bas.map((_, col) => (col >= debut && col < debut + cellules.length ? cellules[col - debut] : null))
   }
   const cases = []
   haut.forEach((c, col) => { if (c !== null) cases.push({ ligne: 0, col, couleur: c }) })
   bas.forEach((c, col) => cases.push({ ligne: 1, col, couleur: c }))
   return { cases, depart: cfg.bonusDepart }
+}
+
+// Une rangée de `longueur` cases en autant de plages que de couleurs dans `ordre`,
+// chacune d'au moins 2 cases, le reste réparti au hasard.
+function plages(aleatoire, longueur, ordre) {
+  const tailles = ordre.map(() => 2)
+  for (let reste = longueur - 2 * ordre.length; reste > 0; reste--) tailles[Math.floor(aleatoire() * tailles.length)]++
+  return ordre.flatMap((c, i) => Array(tailles[i]).fill(c))
+}
+
+// Un nombre de 1 à `max`, au poids de la table { nombre: poids }.
+function auPoids(aleatoire, table, max) {
+  const choix = Object.entries(table ?? { 1: 1, 2: 1, 3: 1 }).map(([k, p]) => [Number(k), p]).filter(([k]) => k >= 1 && k <= max)
+  let r = aleatoire() * choix.reduce((t, [, p]) => t + p, 0)
+  for (const [k, p] of choix) if ((r -= p) < 0) return k
+  return choix[choix.length - 1][0]
 }
 
 function melanger(aleatoire, liste) {

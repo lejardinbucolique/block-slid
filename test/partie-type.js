@@ -27,7 +27,10 @@ export function* partie(graine, maxCoups = 150, reglages = SANS_FIGURES) {
   const alea = prng(graine * 7919 + 13)
   let etat = nouvellePartie({ graine, reglages })
   for (let n = 0; n < maxCoups && !etat.finie; n++) {
-    if (!etat.aVenirDeplace && alea() < 0.3) {
+    // Un déplacement de la première ligne à venir au plus par tour, comme avant BS17 :
+    // les parties de référence (reference-parties.json) restent ainsi les mêmes,
+    // ce qui prouve que le tirage n'a pas changé.
+    if (alea() < 0.3) {
       const b = etat.aVenir[0][Math.floor(alea() * etat.aVenir[0].length)]
       const p = deplacementsPossibles(etat, b.id)
       const dx = alea() < 0.5 ? -p.gauche : p.droite

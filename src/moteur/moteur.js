@@ -53,13 +53,11 @@ function etatVide(reglages, graine) {
   return {
     reglages,
     blocs: [],
-    // Les deux prochaines lignes ; seule la première est déplaçable.
+    // Les deux prochaines lignes, toutes deux déplaçables (BS17).
     aVenir: [],
     score: 0,
     coups: 0,
     finie: false,
-    // Un seul déplacement sur la ligne à venir par coup, avant celui sur la grille.
-    aVenirDeplace: false,
     hasard: graine >>> 0,
     prochainId: 1,
     // La figure à composer : { cases: [{ ligne, col, couleur }], depart }, et le
@@ -91,7 +89,6 @@ export function exporterPartie(etat) {
     score: etat.score,
     coups: etat.coups,
     finie: etat.finie,
-    aVenirDeplace: etat.aVenirDeplace,
     hasard: etat.hasard,
     prochainId: etat.prochainId,
     figure: etat.figure && {
@@ -118,7 +115,8 @@ function lirePartie(d, reglages) {
   const { lignes, colonnes } = reglages
   const entier = (n, min, max = Number.MAX_SAFE_INTEGER) => Number.isInteger(n) && n >= min && n <= max
   if (!entier(d.score, 0) || !entier(d.coups, 0) || !entier(d.hasard, 0, 0xffffffff) || !entier(d.prochainId, 1)) return null
-  if (typeof d.finie !== 'boolean' || typeof d.aVenirDeplace !== 'boolean') return null
+  // Une partie gardée avant BS17 porte encore `aVenirDeplace` : le champ est ignoré.
+  if (typeof d.finie !== 'boolean') return null
   if (!Array.isArray(d.blocs) || !Array.isArray(d.aVenir) || d.aVenir.length !== 2) return null
 
   const ids = new Set()
@@ -159,7 +157,6 @@ function lirePartie(d, reglages) {
   e.score = d.score
   e.coups = d.coups
   e.finie = d.finie
-  e.aVenirDeplace = d.aVenirDeplace
   e.prochainId = d.prochainId
   if (figure) { e.figure = figure; e.bonus = d.bonus }
   else if (reglages.figures) nouvelleFigure(e)
@@ -227,7 +224,6 @@ export function jouer(etat, id, dx) {
   if (!glisser(rangee, id, dx, e.reglages.colonnes)) return null
 
   e.coups++
-  e.aVenirDeplace = false
   const etapes = [instantane(e, 'glisse')]
   const coup = { lignesEffacees: 0, points: 0, secours: null, defaite: false, etapes, figure: null }
   ajouter(coup, resoudre(e, etapes))
@@ -303,29 +299,35 @@ function jouerFigure(e) {
   return { issue, gain, avant, bonusAvant, nouvelle: e.figure }
 }
 
-// Glisser un bloc de la première ligne à venir, avant le coup sur la grille.
-// Ne compte pas comme un coup ; un seul par coup.
+// Glisser un bloc de l'une des deux lignes à venir, avant le coup sur la grille.
+// Gratuit et sans limite (BS17) : ce n'est pas un coup, et il n'utilise aucun
+// hasard, donc ne change rien aux lignes qui arriveront ensuite. La ligne garde
+// sa disposition en montant d'une place, et la copie de secours la reprend telle quelle.
 export function deplacerAVenir(etat, id, dx) {
-  if (etat.finie || etat.aVenirDeplace) return null
-  if (!etat.aVenir[0].some((b) => b.id === id)) return null
+  if (etat.finie) return null
+  const rang = etat.aVenir.findIndex((l) => l.some((b) => b.id === id))
+  if (rang < 0) return null
   if (dx === 0) return etat
 
   const e = cloner(etat)
-  if (!glisser(e.aVenir[0], id, dx, e.reglages.colonnes)) return null
-  e.aVenirDeplace = true
+  if (!glisser(e.aVenir[rang], id, dx, e.reglages.colonnes)) return null
   return e
+}
+
+// La rangée du bloc, de la grille ou de l'une des lignes à venir ; null si inconnu.
+function rangeeDe(etat, id) {
+  const bloc = etat.blocs.find((b) => b.id === id)
+  if (bloc) return etat.blocs.filter((b) => b.ligne === bloc.ligne)
+  return etat.aVenir.find((l) => l.some((b) => b.id === id)) ?? null
 }
 
 // --- Lecture, pour l'interface -------------------------------------------
 
-// Jusqu'où un bloc (de la grille ou de la première ligne à venir) peut glisser,
+// Jusqu'où un bloc (de la grille ou d'une ligne à venir) peut glisser,
 // en poussant ses voisins : { gauche, droite } en nombre de cases.
 export function deplacementsPossibles(etat, id) {
   const { colonnes } = etat.reglages
-  const bloc = etat.blocs.find((b) => b.id === id)
-  const rangee = bloc
-    ? etat.blocs.filter((b) => b.ligne === bloc.ligne)
-    : etat.aVenir[0].some((b) => b.id === id) ? etat.aVenir[0] : null
+  const rangee = rangeeDe(etat, id)
   if (!rangee) return { gauche: 0, droite: 0 }
   const pas = (sens) => {
     const copie = rangee.map((b) => ({ ...b }))
@@ -339,12 +341,9 @@ export function deplacementsPossibles(etat, id) {
 // Où seraient les blocs de la rangée si on glissait le bloc de dx cases, sans
 // rien jouer : { id: col } pour tous les blocs de la rangée, ou null si le
 // glisser est refusé faute de place. Sert à montrer les blocs poussés pendant
-// le geste. Marche pour un bloc de la grille comme de la première ligne à venir.
+// le geste. Marche pour un bloc de la grille comme de l'une des deux lignes à venir.
 export function glissement(etat, id, dx) {
-  const bloc = etat.blocs.find((b) => b.id === id)
-  const rangee = bloc
-    ? etat.blocs.filter((b) => b.ligne === bloc.ligne)
-    : etat.aVenir[0].some((b) => b.id === id) ? etat.aVenir[0] : null
+  const rangee = rangeeDe(etat, id)
   if (!rangee) return null
   const copie = rangee.map((b) => ({ ...b }))
   if (!glisser(copie, id, dx, etat.reglages.colonnes)) return null

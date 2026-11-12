@@ -137,10 +137,8 @@ export function demarrerJeu() {
     el.classList.remove('glisse', 'tire', 'refus', 'allume')
     el.classList.toggle('a1', zonePlace === 'a1')
     el.classList.toggle('a2', zonePlace === 'a2')
-    // Pendant un coup, la ligne à venir n'est ni déplaçable ni grisée.
-    const libre = !vue.anime
-    el.classList.toggle('fait', libre && zonePlace === 'a1' && etat.aVenirDeplace)
-    el.classList.toggle('mobile', libre && zonePlace === 'a1' && !etat.aVenirDeplace && !etat.finie)
+    // Les deux lignes à venir se déplacent à volonté, sauf pendant l'animation d'un coup.
+    el.classList.toggle('mobile', !vue.anime && zonePlace !== 'grille' && !etat.finie)
     // La copie de secours prend la place de la ligne à venir le temps d'apparaître.
     el.classList.toggle('cache', vue.copies.length > 0 && zonePlace === 'a1' && !vue.copies.includes(b))
   }
@@ -328,8 +326,9 @@ export function demarrerJeu() {
 
   // --- Geste --------------------------------------------------------------
 
-  // Quel bloc est sous le doigt ? La ligne à venir est fine : toute sa bande,
-  // et un peu au-delà, sert de zone de toucher.
+  // Quel bloc est sous le doigt ? Les lignes à venir sont fines : chacune a pour
+  // zone de toucher sa bande plus la moitié de l'écart qui la sépare de sa voisine
+  // (la grille pour la première), sans jamais mordre sur la zone d'une autre.
   function viser(e) {
     const r = plateau.getBoundingClientRect()
     const x = e.clientX - r.left
@@ -341,11 +340,10 @@ export function demarrerJeu() {
       const b = blocEn(etat, Math.floor(y / g.ch), col)
       return b ? { b, place: 'grille' } : null
     }
-    if (y < yAvenir(1) + g.ph * 0.4) {
-      const b = etat.aVenir[0].find((x2) => x2.col <= col && col < x2.col + x2.largeur)
-      return b ? { b, place: 'a1' } : null
-    }
-    return null
+    if (y < yAvenir(0) - g.ch * ECART_AVENIR / 2) return null // entre la grille et la première ligne
+    const rang = y < yAvenir(0) + g.ph + g.ch * ECART_ENTRE / 2 ? 0 : 1
+    const b = etat.aVenir[rang].find((x2) => x2.col <= col && col < x2.col + x2.largeur)
+    return b ? { b, place: rang === 0 ? 'a1' : 'a2' } : null
   }
 
   function debutGeste(e) {
@@ -356,11 +354,8 @@ export function demarrerJeu() {
     const cible = viser(e)
     if (!cible) return
     e.preventDefault()
-    if (cible.place === 'a1' && etat.aVenirDeplace) {
-      secouer(etat.aVenir[0].map((b) => b.id))
-      return
-    }
-    const rangee = cible.place === 'a1' ? etat.aVenir[0] : etat.blocs.filter((b) => b.ligne === cible.b.ligne)
+    const rang = cible.place === 'a1' ? 0 : 1
+    const rangee = cible.place === 'grille' ? etat.blocs.filter((b) => b.ligne === cible.b.ligne) : etat.aVenir[rang]
     try { plateau.setPointerCapture(e.pointerId) } catch { /* souris sortie de la fenêtre : sans importance */ }
     geste = {
       pointeur: e.pointerId,
@@ -370,7 +365,7 @@ export function demarrerJeu() {
       rangee: rangee.map((b) => ({
         id: b.id,
         col: b.col,
-        y: cible.place === 'a1' ? yAvenir(0) : b.ligne * g.ch,
+        y: cible.place === 'grille' ? b.ligne * g.ch : yAvenir(rang),
       })),
       limites: deplacementsPossibles(etat, cible.b.id),
       dx: 0,
@@ -407,7 +402,7 @@ export function demarrerJeu() {
     geste = null
     try { plateau.releasePointerCapture(e.pointerId) } catch { /* déjà relâché */ }
 
-    const suivant = dx === 0 ? null : place === 'a1' ? deplacerAVenir(etat, id, dx) : jouer(etat, id, dx)
+    const suivant = dx === 0 ? null : place === 'grille' ? jouer(etat, id, dx) : deplacerAVenir(etat, id, dx)
     if (!suivant) {
       afficher() // le bloc revient à sa place
       return
@@ -427,17 +422,6 @@ export function demarrerJeu() {
     if (!geste || e.pointerId !== geste.pointeur) return
     geste = null
     afficher()
-  }
-
-  // Un bloc qui ne peut pas bouger (ligne à venir déjà déplacée) : petit tremblement.
-  function secouer(ids) {
-    for (const id of ids) {
-      const el = elements.get(id)?.el
-      if (!el) continue
-      el.classList.remove('secoue')
-      void el.offsetWidth
-      el.classList.add('secoue')
-    }
   }
 
   plateau.addEventListener('pointerdown', debutGeste)

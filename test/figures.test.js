@@ -550,3 +550,43 @@ test('changer de réglages en pleine partie : couper retire la figure, activer e
   assert.equal(figurePresente(remis.figure, remis.blocs, remis.reglages.lignes, remis.reglages.colonnes), false)
   assert.equal(changerReglages(e, e.reglages), e)
 })
+
+// --- Plages de couleur (BS16) -------------------------------------------------
+
+// Les plages d'une rangée : [couleur, longueur] des cases voisines de même couleur.
+function plagesDe(rangee) {
+  const res = []
+  rangee.forEach((c, i) => {
+    if (c !== null && i > 0 && rangee[i - 1] === c) res[res.length - 1][1]++
+    else if (c !== null) res.push([c, 1])
+  })
+  return res
+}
+
+test('figures neuves : des plages de 2 cases au moins, 3 couleurs au plus, réparties au poids', () => {
+  const r = alea(7)
+  const compte = { 1: 0, 2: 0, 3: 0 }
+  const N = 5000
+  for (let i = 0; i < N; i++) {
+    const f = proposerFigure([], REGLAGES, r)
+    assert.ok(figureValide(f, FIGURES))
+    const m = motifFigure(f)
+    const bas = plagesDe(m.bas)
+    assert.ok(bas.length <= 3 && bas.every(([, n]) => n >= 2), `bas ${m.bas}`)
+    const haut = plagesDe(m.haut)
+    if (m.haut.includes(null)) assert.ok(haut.length <= 2 && haut.every(([, n]) => n >= 2), `haut ${m.haut}`)
+    m.haut.forEach((c, col) => { if (c !== null) assert.notEqual(m.bas[col], undefined) })
+    const nb = new Set(m.couleurs).size
+    assert.ok(nb <= 3)
+    compte[nb]++
+  }
+  assert.ok(compte[2] / N > 0.5 && compte[2] / N < 0.7, JSON.stringify(compte))
+  assert.ok(compte[1] / N > 0.12 && compte[1] / N < 0.28, JSON.stringify(compte))
+  assert.ok(compte[3] / N > 0.12 && compte[3] / N < 0.28, JSON.stringify(compte))
+})
+
+test('figures anciennes très mélangées : toujours valides et reconnues', () => {
+  const vieille = figure('JOJOJO')
+  assert.ok(figureValide(vieille, FIGURES))
+  assert.ok(motifFigure(vieille))
+})
