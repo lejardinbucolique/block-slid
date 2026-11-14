@@ -64,6 +64,9 @@ function etatVide(reglages, graine) {
     // bonus qu'elle rapporterait maintenant. Null seulement si les figures sont coupées.
     figure: null,
     bonus: 0,
+    // Combien de fois le joueur a changé de figure d'un geste (BS19) : mêlé au
+    // hasard à part, pour que chaque changement donne une figure autre.
+    figuresTirees: 0,
     // Ce qu'a produit le dernier coup, pour l'affichage.
     dernierCoup: null,
   }
@@ -96,6 +99,7 @@ export function exporterPartie(etat) {
       depart: etat.figure.depart,
     },
     bonus: etat.bonus,
+    figuresTirees: etat.figuresTirees,
   }
 }
 
@@ -158,6 +162,8 @@ function lirePartie(d, reglages) {
   e.coups = d.coups
   e.finie = d.finie
   e.prochainId = d.prochainId
+  // Absent d'une partie gardée avant BS19 : 0.
+  e.figuresTirees = entier(d.figuresTirees, 0, 0xffffff) ? d.figuresTirees : 0
   if (figure) { e.figure = figure; e.bonus = d.bonus }
   else if (reglages.figures) nouvelleFigure(e)
   return e
@@ -187,8 +193,25 @@ function lireFigure(d, reglages, entier) {
 // Propose une figure (neuve) et son bonus de départ ; aucune seulement si les
 // figures sont coupées.
 function nouvelleFigure(etat) {
-  etat.figure = etat.reglages.figures ? proposerFigure(etat.blocs, etat.reglages, hasardAPart(etat, 1)) : null
+  etat.figure = etat.reglages.figures ? proposerFigure(etat.blocs, etat.reglages, hasardAPart(etat, 1, etat.figuresTirees)) : null
   etat.bonus = etat.figure ? etat.figure.depart : 0
+}
+
+// Le joueur juge la figure infaisable (BS19) : une autre la remplace tout de suite,
+// avec son bonus de départ. Ce n'est pas un coup : grille, lignes à venir, score,
+// coups et hasard de la partie ne bougent pas, donc les lignes qui arriveront sont
+// celles d'avant. Null sans figure ou si la partie est finie.
+export function changerFigure(etat) {
+  if (etat.finie || !etat.figure || !etat.reglages.figures) return null
+  const avant = JSON.stringify(etat.figure.cases)
+  const e = cloner(etat)
+  // Le compteur avance à chaque tirage : deux appels de suite ne rendent pas la même figure.
+  for (let essai = 0; essai < 20; essai++) {
+    e.figuresTirees++
+    nouvelleFigure(e)
+    if (JSON.stringify(e.figure.cases) !== avant) break
+  }
+  return e
 }
 
 // Applique d'autres réglages à une partie en cours, sans la perdre : couper les
@@ -606,8 +629,10 @@ function couleursVoulues(etat) {
 
 // Un hasard à part (BS15), tiré de l'état sans l'avancer : reproductible, il
 // laisse au hasard de la partie exactement les tirages d'avant les figures.
-function hasardAPart(etat, sel) {
+function hasardAPart(etat, sel, salage = 0) {
   let s = (Math.imul(etat.hasard ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(etat.prochainId + sel * 0x10001, 0xc2b2ae35)) >>> 0
+  // Le salage (BS19) vaut 0 tant que le joueur n'a pas changé de figure : rien ne change alors.
+  if (salage) s = (s ^ Math.imul(salage, 0x9e3779b1)) >>> 0
   return () => {
     s = (s + 0x6d2b79f5) >>> 0
     let t = Math.imul(s ^ (s >>> 15), s | 1)

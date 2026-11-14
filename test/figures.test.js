@@ -12,6 +12,7 @@ import {
   depuisTexte,
   figurePresente,
   figureValide,
+  figureCoherente,
   motifFigure,
   proposerFigure,
   tailleFigure,
@@ -573,8 +574,7 @@ test('figures neuves : des plages de 2 cases au moins, 3 couleurs au plus, répa
     const m = motifFigure(f)
     const bas = plagesDe(m.bas)
     assert.ok(bas.length <= 3 && bas.every(([, n]) => n >= 2), `bas ${m.bas}`)
-    const haut = plagesDe(m.haut)
-    if (m.haut.includes(null)) assert.ok(haut.length <= 2 && haut.every(([, n]) => n >= 2), `haut ${m.haut}`)
+    assert.ok(figureCoherente(f), `haut ${m.haut} / bas ${m.bas}`)
     m.haut.forEach((c, col) => { if (c !== null) assert.notEqual(m.bas[col], undefined) })
     const nb = new Set(m.couleurs).size
     assert.ok(nb <= 3)
@@ -589,4 +589,34 @@ test('figures anciennes très mélangées : toujours valides et reconnues', () =
   const vieille = figure('JOJOJO')
   assert.ok(figureValide(vieille, FIGURES))
   assert.ok(motifFigure(vieille))
+})
+
+test('BS18 : sur 5000 tirages, le haut reprend les cases du bas dans leur ordre, parfois décalé', () => {
+  const r = alea(18)
+  const sortes = { identiques: 0, decalees: 0, alignees: 0 }
+  for (let i = 0; i < 5000; i++) {
+    const f = proposerFigure([], REGLAGES, r)
+    const m = motifFigure(f)
+    assert.ok(figureValide(f, FIGURES) && figureCoherente(f), `tirage ${i}`)
+    const cols = m.haut.flatMap((c, col) => (c === null ? [] : [col]))
+    cols.forEach((col) => assert.notEqual(m.bas[col], undefined))
+    assert.ok(new Set(m.couleurs).size <= 3)
+    if (cols.length === m.largeur) { sortes.identiques++; continue }
+    assert.ok(cols.length >= 4 && cols[cols.length - 1] - cols[0] + 1 - cols.length <= 2)
+    if (cols.every((col) => m.haut[col] === m.bas[col])) sortes.alignees++
+    else sortes.decalees++
+  }
+  console.log('BS18 sortes', JSON.stringify(sortes))
+  assert.ok(sortes.decalees > 500 && sortes.alignees > 300, JSON.stringify(sortes))
+})
+
+test('BS18 : la capture décalée du joueur est cohérente et reconnue ; un ordre inversé ne l est pas', () => {
+  const decalee = figure2('..JJPV.', 'JJPVVPV')
+  assert.ok(figureValide(decalee, FIGURES))
+  assert.ok(figureCoherente(decalee))
+  assert.equal(dans(decalee, ['...JJPV.', '.JJPVVPV']), true)
+  assert.ok(figureCoherente(figure2('P.P.PVP', 'PVPPPVP')))
+  const inverse = figure2('VVPP', 'PPPVVV')
+  assert.ok(figureValide(inverse, FIGURES), 'les anciennes restent valides')
+  assert.equal(figureCoherente(inverse), false)
 })

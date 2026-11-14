@@ -1,5 +1,5 @@
 // Ce qui reste sur l'appareil : le meilleur score, le niveau de vibration, le
-// choix des figures et la partie en cours.
+// choix des figures, la partie en cours et les figures signalées.
 // Le stockage peut manquer ou refuser (navigation privée) : le jeu marche alors
 // sans rien retenir.
 
@@ -7,6 +7,7 @@ const CLE_MEILLEUR = 'block-slid.meilleur'
 const CLE_VIBRATION = 'block-slid.vibration'
 const CLE_PARTIE = 'block-slid.partie'
 const CLE_FIGURES = 'block-slid.figures'
+const CLE_SIGNALEMENTS = 'block-slid.signalements'
 
 function lire(cle) {
   try { return localStorage.getItem(cle) } catch { return null }
@@ -48,6 +49,25 @@ export function partieGardee() {
 }
 export const garderPartie = (donnees) => ecrire(CLE_PARTIE, JSON.stringify(donnees))
 export const oublierPartie = () => effacer(CLE_PARTIE)
+
+// Les figures signalées infaisables (BS19), les plus anciennes d'abord. Elles ne
+// quittent l'appareil que par le geste « Exporter » du joueur.
+export const MAX_SIGNALEMENTS = 100
+export function signalements() {
+  const texte = lire(CLE_SIGNALEMENTS)
+  if (texte === null) return []
+  try {
+    const liste = JSON.parse(texte)
+    return Array.isArray(liste) ? liste.filter((s) => s && typeof s === 'object') : []
+  } catch { return [] }
+}
+// Ajoute un signalement ; au-delà de MAX_SIGNALEMENTS, les plus anciens partent.
+export function ajouterSignalement(signalement) {
+  ecrire(CLE_SIGNALEMENTS, JSON.stringify([...signalements(), signalement].slice(-MAX_SIGNALEMENTS)))
+}
+export const viderSignalements = () => effacer(CLE_SIGNALEMENTS)
+// Le contenu du fichier à exporter : du JSON lisible.
+export const contenuSignalements = () => JSON.stringify({ signalements: signalements() }, null, 2)
 
 // Sans effet quand l'appareil ou le navigateur ne sait pas vibrer.
 export function vibrer(niveau) {

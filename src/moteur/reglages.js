@@ -18,8 +18,8 @@ export const FIGURES = Object.freeze({
   // Largeur du motif, en colonnes (jamais la grille entière : la ligne disparaîtrait).
   largeurs: Object.freeze([6, 7]),
   // Ligne du haut incomplète (BS14) : au moins `min` cases, au plus `trousMax` trous
-  // entre sa première et sa dernière case, aux couleurs libres dans la palette de la
-  // figure. `chanceIncomplete` : la part des figures qui en ont une (sinon, deux lignes
+  // entre sa première et sa dernière case, faite de cases du bas dans leur ordre (BS18) ; la
+  // `chanceIncomplete` : la part des figures qui en ont une (sinon, deux lignes
   // identiques). Défaut à confirmer en jouant.
   haut: Object.freeze({ min: 4, trousMax: 2, chanceIncomplete: 0.5 }),
   // Couleurs différentes au plus dans une même figure.

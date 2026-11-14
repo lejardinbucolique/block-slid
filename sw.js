@@ -1,6 +1,6 @@
 // Service worker : précache du socle, puis la page s'ouvre sans réseau.
 // Changer VERSION à chaque modification des fichiers listés ci-dessous.
-const VERSION = "block-slid-v15";
+const VERSION = "block-slid-v17";
 const FICHIERS = [
   "./",
   "index.html",
@@ -8,6 +8,7 @@ const FICHIERS = [
   "app.js",
   "src/ui/jeu.js",
   "src/ui/stockage.js",
+  "src/ui/signalement.js",
   "src/moteur/index.js",
   "src/moteur/figures.js",
   "src/moteur/moteur.js",

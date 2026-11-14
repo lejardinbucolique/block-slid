@@ -2,7 +2,7 @@
 // bas de 6 ou 7 blocs d'une seule case d'affilée, et une ligne du haut posée dessus,
 // soit complète (les deux lignes sont alors identiques), soit incomplète : d'au
 // moins 4 cases, sur des colonnes occupées par la ligne du bas, d'un seul tenant ou
-// avec quelques trous, aux couleurs libres. 1 à 3 couleurs en tout. Elles rapportent
+// avec quelques trous, faite de cases du bas dans leur ordre (BS18). 1 à 3 couleurs en tout. Elles rapportent
 // un bonus quand elles apparaissent quelque part dans la grille. Fonctions pures :
 // le hasard est passé en paramètre.
 //
@@ -11,8 +11,8 @@
 // bonus de départ.
 //
 // Pourquoi elle est faisable : chaque case de la ligne du haut a une case dessous
-// (aucun bloc en l'air), à la manière de la copie de ligne du jeu. Rien n'est testé
-// après coup : ses couleurs sont tirées librement, et ce sont les lignes qui
+// (aucun bloc en l'air), à la manière de la copie de ligne du jeu, et ses couleurs
+// se retrouvent dans le même ordre en bas (BS18). Pour le reste, les lignes qui
 // arrivent qui s'adaptent à elle en recolorant leurs blocs d'une case (BS15).
 
 // Hauteur et largeur (en cases) du rectangle qui contient la figure.
@@ -21,6 +21,27 @@ export function tailleFigure(figure) {
     lignes: Math.max(...figure.cases.map((c) => c.ligne)) + 1,
     colonnes: Math.max(...figure.cases.map((c) => c.col)) + 1,
   }
+}
+
+// La figure écrite en clair, pour la lire d'un coup d'œil (signalements, BS19) :
+// { haut, bas, legende }. Chaque rangée a une lettre par colonne (un point pour une
+// case vide) ; la légende dit quelle lettre est quelle couleur.
+const LETTRES = { jaune: 'J', orange: 'O', rouge: 'R', vert: 'V', bleu: 'B', 'bleu clair': 'C', violet: 'P' }
+
+export function figureEnTexte(figure) {
+  const { colonnes } = tailleFigure(figure)
+  const legende = {}
+  const rangee = (ligne) => {
+    const r = Array(colonnes).fill('.')
+    for (const c of figure.cases) {
+      if (c.ligne !== ligne) continue
+      const lettre = LETTRES[c.couleur] ?? c.couleur[0].toUpperCase()
+      legende[lettre] = c.couleur
+      r[c.col] = lettre
+    }
+    return r.join('')
+  }
+  return { haut: rangee(0), bas: rangee(1), legende }
 }
 
 // --- Le motif --------------------------------------------------------------
@@ -105,6 +126,21 @@ export function figurePresente(figure, blocs, nbLignes = null, colonnes = null) 
   return false
 }
 
+// La ligne du haut est-elle faite de cases de la ligne du bas, dans le même ordre
+// de gauche à droite (BS18) ? Sa suite de couleurs est alors une sous-suite de
+// celle du bas, quelle que soit sa place : c'est ce qui la rend faisable.
+export function figureCoherente(figure) {
+  const motif = motifFigure(figure)
+  if (!motif) return false
+  let i = 0
+  for (const c of motif.haut) {
+    if (c === null) continue
+    while (i < motif.bas.length && motif.bas[i] !== c) i++
+    if (i++ >= motif.bas.length) return false
+  }
+  return true
+}
+
 // --- Proposer ----------------------------------------------------------------
 
 // Tire une figure : toujours une, jamais « rien ». Une figure déjà dans la
@@ -124,8 +160,8 @@ export function proposerFigure(blocs, reglages, aleatoire) {
 // au plus 3 plages en bas et 2 en haut. Pas de couleurs alternées case par case, qui
 // demandaient de poser les blocs d'une case dans un ordre exact. Avec la chance
 // `haut.chanceIncomplete`, la ligne du haut est incomplète (taille et place au hasard,
-// d'un seul tenant ou en deux morceaux d'au moins 2 cases séparés par un trou, couleurs
-// libres dans la palette) ; sinon elle recopie celle du bas. `figureValide` ne vérifie
+// cases du bas gardées dans leur ordre, posées avec au plus
+// `trousMax` trous, éventuellement décalées) ; sinon elle recopie celle du bas. `figureValide` ne vérifie
 // pas les plages : les parties gardées avec une figure d'avant se rouvrent telles quelles.
 function composer(reglages, aleatoire) {
   const cfg = reglages.figures
@@ -139,26 +175,24 @@ function composer(reglages, aleatoire) {
   const bas = plages(aleatoire, largeur, ordre)
   let haut = bas
   if (aleatoire() < cfg.haut.chanceIncomplete) {
+    // BS18 : n cases du bas, gardées dans leur ordre (une fenêtre de cases voisines,
+    // parfois privée de 1 ou 2 cases du milieu), puis posées en haut sur une étendue
+    // de n à n + trousMax colonnes, n'importe où dans la largeur, décalées ou non.
     const n = entre(Math.min(cfg.haut.min, largeur - 1), largeur - 1)
-    // En deux morceaux (d'au moins 2 cases chacun) quand la place et les trous le permettent.
-    const deux = cfg.haut.trousMax >= 1 && n >= 4 && n + 1 <= largeur && aleatoire() < 0.5
-    const trou = deux ? entre(1, Math.min(cfg.haut.trousMax, largeur - n)) : 0
-    const debut = entre(0, largeur - n - trou)
-    const couleur = () => palette[entre(0, palette.length - 1)]
-    let cellules
-    if (deux) {
-      const g = entre(2, n - 2)
-      const c1 = couleur()
-      const c2 = couleur()
-      cellules = [...Array(g).fill(c1), ...Array(trou).fill(null), ...Array(n - g).fill(c2)]
-    } else {
-      // Un seul tenant : une plage, ou deux de couleurs différentes si la palette le permet.
-      const c1 = couleur()
-      const autres = palette.filter((c) => c !== c1)
-      cellules = autres.length && n >= 4 && aleatoire() < 0.5
-        ? plages(aleatoire, n, [c1, autres[entre(0, autres.length - 1)]])
-        : Array(n).fill(c1)
-    }
+    const retires = aleatoire() < 0.6 ? 0 : entre(1, Math.max(1, Math.min(2, largeur - n, n - 1)))
+    const k = Math.min(retires, largeur - n)
+    const fenetre = entre(0, largeur - n - k)
+    let gardees = bas.slice(fenetre, fenetre + n + k).map((c, i) => ({ c, i }))
+    for (let r = 0; r < k; r++) gardees.splice(entre(1, gardees.length - 2), 1)
+    const t = entre(0, Math.min(cfg.haut.trousMax, largeur - n))
+    const ecarts = Array(n - 1).fill(0)
+    for (let r = 0; r < t; r++) ecarts[entre(0, n - 2)]++
+    const cellules = []
+    gardees.forEach(({ c }, i) => {
+      cellules.push(c)
+      if (i < n - 1) for (let e = 0; e < ecarts[i]; e++) cellules.push(null)
+    })
+    const debut = entre(0, largeur - cellules.length)
     haut = bas.map((_, col) => (col >= debut && col < debut + cellules.length ? cellules[col - debut] : null))
   }
   const cases = []

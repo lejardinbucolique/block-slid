@@ -21,6 +21,7 @@ import {
   blocEn,
   tailleFigure,
   changerReglages,
+  changerFigure,
 } from '../moteur/index.js'
 import {
   NIVEAUX_VIBRATION,
@@ -34,7 +35,12 @@ import {
   garderPartie,
   oublierPartie,
   vibrer,
+  signalements,
+  ajouterSignalement,
+  viderSignalements,
+  contenuSignalements,
 } from './stockage.js'
+import { construireSignalement } from './signalement.js'
 
 // Mise en page, en multiples de la hauteur d'une ligne (jamais figée : elle se
 // calcule d'après le nombre de lignes et la place disponible).
@@ -273,6 +279,24 @@ export function demarrerJeu() {
     else garderPartie(exporterPartie(etat))
   }
 
+  // Le joueur juge la figure infaisable (BS19) : elle est gardée dans la liste des
+  // signalements, puis une autre la remplace aussitôt. Rien d'autre ne bouge.
+  function signalerFigure() {
+    if (geste || !etat.figure || etat.finie || dialogueOuvert()) return
+    if (lecture) conclure({ coupe: true })
+    const suivant = changerFigure(etat)
+    if (!suivant) return
+    const version = $('version').textContent.replace(/^Versions*/, '').trim() || 'inconnue'
+    ajouterSignalement(construireSignalement(etat, { version }))
+    etat = suivant
+    garder()
+    afficherFigure()
+    animerFigure({ issue: 'expiree' })
+    afficherSignalees()
+  }
+
+  $('figure-infaisable').addEventListener('click', signalerFigure)
+
   // --- Un coup, pas à pas ---------------------------------------------------
 
   // Pose les étapes l'une après l'autre. L'état du moteur est déjà le final :
@@ -504,8 +528,61 @@ export function demarrerJeu() {
     afficherFigure()
   })
 
+  // Les figures signalées : leur nombre, l'export en fichier et le vidage (en deux touchers).
+  const signaleesEtat = $('signalees-etat')
+  const boutonVider = $('signalees-vider')
+  let minuteurVider = null
+
+  function afficherSignalees() {
+    const n = signalements().length
+    signaleesEtat.textContent = n === 0 ? 'Aucune figure signalée.' : n === 1 ? '1 figure signalée.' : `${n} figures signalées.`
+    $('signalees-exporter').disabled = n === 0
+    boutonVider.disabled = n === 0
+    annulerVidage()
+  }
+
+  function annulerVidage() {
+    clearTimeout(minuteurVider)
+    minuteurVider = null
+    boutonVider.textContent = 'Vider la liste'
+  }
+
+  boutonVider.addEventListener('click', () => {
+    if (minuteurVider === null) {
+      boutonVider.textContent = 'Confirmer le vidage'
+      minuteurVider = setTimeout(annulerVidage, 5000)
+      return
+    }
+    viderSignalements()
+    afficherSignalees()
+  })
+
+  // Par la feuille de partage du téléphone quand elle sait envoyer un fichier, sinon
+  // par un téléchargement. Rien ne part sans ce geste.
+  async function exporterSignalees() {
+    const fichier = new File([contenuSignalements()], 'figures-signalees.json', { type: 'application/json' })
+    try {
+      if (navigator.canShare?.({ files: [fichier] })) {
+        await navigator.share({ files: [fichier], title: 'Figures signalées' })
+        return
+      }
+    } catch (err) {
+      if (err?.name === 'AbortError') return // le joueur a fermé la feuille de partage
+    }
+    const lien = document.createElement('a')
+    lien.href = URL.createObjectURL(fichier)
+    lien.download = fichier.name
+    document.body.appendChild(lien)
+    lien.click()
+    lien.remove()
+    setTimeout(() => URL.revokeObjectURL(lien.href), 10000)
+  }
+
+  $('signalees-exporter').addEventListener('click', exporterSignalees)
+
   function ouvrirReglages() {
     if (!fin.hidden) return
+    afficherSignalees()
     reglages.hidden = false
     $('reglages-fermer').focus()
   }
@@ -536,6 +613,7 @@ export function demarrerJeu() {
   if (window.ResizeObserver) new ResizeObserver(remesurer).observe(zone)
 
   afficherVibration()
+  afficherSignalees()
   mesurer()
   sansAnimation(() => afficher({ animer: false }))
   garder() // une partie neuve est gardée dès son premier état affiché

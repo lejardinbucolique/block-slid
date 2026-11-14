@@ -26,7 +26,12 @@
       <div id="score" aria-live="off" aria-label="Score">0</div>
       <div id="figure" hidden>
         <div id="figure-carre" aria-hidden="true"></div>
-        <span id="figure-bonus">0</span>
+        <div id="figure-bas">
+          <span id="figure-bonus">0</span>
+          <button id="figure-infaisable" type="button" aria-label="Figure infaisable" title="Figure infaisable">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l9 7-9 7V5Zm10 0h3v14h-3V5Z"/></svg>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -70,6 +75,15 @@
             <span>Figures à composer (bonus)</span>
           </label>
           <p>Un bonus à gagner en composant la figure montrée à droite du score. Il baisse à chaque coup.</p>
+        </div>
+
+        <div class="reglage">
+          <h3 id="signalees-titre">Figures signalées</h3>
+          <p id="signalees-etat" aria-live="polite"></p>
+          <div class="deux-boutons">
+            <button id="signalees-exporter" type="button">Exporter</button>
+            <button id="signalees-vider" type="button">Vider la liste</button>
+          </div>
         </div>
 
         <button id="rejouer" class="gros" type="button">Rejouer</button>
