@@ -41,7 +41,7 @@ import {
   viderSignalements,
   contenuSignalements,
 } from './stockage.js'
-import { construireSignalement } from './signalement.js'
+import { construireSignalement, resumeSignalements, RAISONS } from './signalement.js'
 
 // Mise en page, en multiples de la hauteur d'une ligne (jamais figée : elle se
 // calcule d'après le nombre de lignes et la place disponible).
@@ -282,23 +282,87 @@ export function demarrerJeu() {
     else garderPartie(exporterPartie(etat))
   }
 
-  // Le joueur juge la figure infaisable (BS19) : elle est gardée dans la liste des
-  // signalements, puis une autre la remplace aussitôt. Rien d'autre ne bouge.
-  function signalerFigure() {
+  // Signaler la figure (BS19, BS22) : le bouton sous la figure ouvre une fenêtre qui
+  // demande pourquoi. « Refuser » garde le signalement puis une autre figure remplace
+  // aussitôt celle-ci ; « Signaler seulement » garde le signalement et ne touche à rien ;
+  // « Annuler » ferme sans rien garder.
+  const signaler = $('signaler')
+  const boutonsRaison = []
+  let raisonChoisie = null
+
+  for (const { id, libelle } of RAISONS) {
+    const bouton = document.createElement('button')
+    bouton.type = 'button'
+    bouton.setAttribute('role', 'radio')
+    bouton.setAttribute('aria-checked', 'false')
+    bouton.textContent = libelle
+    bouton.addEventListener('click', () => choisirRaison(id))
+    $('signaler-raisons').appendChild(bouton)
+    boutonsRaison.push([id, bouton])
+  }
+
+  function choisirRaison(id) {
+    raisonChoisie = id
+    for (const [rid, bouton] of boutonsRaison) bouton.setAttribute('aria-checked', String(rid === id))
+    $('signaler-refuser').disabled = false
+    $('signaler-garder').disabled = false
+  }
+
+  function ouvrirSignalement() {
     if (geste || !etat.figure || etat.finie || dialogueOuvert()) return
     if (lecture) conclure({ coupe: true })
-    const suivant = changerFigure(etat)
-    if (!suivant) return
+    raisonChoisie = null
+    for (const [, bouton] of boutonsRaison) bouton.setAttribute('aria-checked', 'false')
+    $('signaler-texte').value = ''
+    $('signaler-refuser').disabled = true
+    $('signaler-garder').disabled = true
+    signaler.hidden = false
+    boutonsRaison[0][1].focus()
+  }
+
+  function fermerSignalement() {
+    signaler.hidden = true
+    $('figure-infaisable').focus()
+  }
+
+  // Garde le signalement de la figure montrée, avec la raison et le texte du joueur.
+  function enregistrerSignalement(gesteChoisi) {
     const version = $('version').textContent.replace(/^Versions*/, '').trim() || 'inconnue'
-    ajouterSignalement(construireSignalement(etat, { version }))
-    etat = suivant
-    garder()
-    afficherFigure()
-    animerFigure({ issue: 'expiree' })
+    ajouterSignalement(construireSignalement(etat, {
+      version,
+      raison: raisonChoisie,
+      texte: $('signaler-texte').value,
+      geste: gesteChoisi,
+    }))
     afficherSignalees()
   }
 
-  $('figure-infaisable').addEventListener('click', signalerFigure)
+  function refuserFigure() {
+    if (signaler.hidden || raisonChoisie === null) return
+    const suivant = changerFigure(etat)
+    if (!suivant) return
+    enregistrerSignalement('refusee')
+    etat = suivant
+    fermerSignalement()
+    garder()
+    afficherFigure()
+    animerFigure({ issue: 'expiree' })
+  }
+
+  function signalerSeulement() {
+    if (signaler.hidden || raisonChoisie === null) return
+    enregistrerSignalement('gardee')
+    fermerSignalement()
+  }
+
+  $('figure-infaisable').addEventListener('click', ouvrirSignalement)
+  $('signaler-refuser').addEventListener('click', refuserFigure)
+  $('signaler-garder').addEventListener('click', signalerSeulement)
+  $('signaler-annuler').addEventListener('click', fermerSignalement)
+  signaler.addEventListener('click', (e) => { if (e.target === signaler) fermerSignalement() })
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !signaler.hidden) fermerSignalement()
+  })
 
   // Passer le coup (BS20) : la ligne monte sans qu'aucun bloc ne bouge. Un coup de grille
   // comme un autre : même animation, même vibration, même sauvegarde. Comme pour un
@@ -482,7 +546,7 @@ export function demarrerJeu() {
 
   const fin = $('fin')
   const reglages = $('reglages')
-  const dialogueOuvert = () => !fin.hidden || !reglages.hidden
+  const dialogueOuvert = () => !fin.hidden || !reglages.hidden || !signaler.hidden
 
   function afficherFin() {
     minuteurFin = null
@@ -558,8 +622,9 @@ export function demarrerJeu() {
   let minuteurVider = null
 
   function afficherSignalees() {
-    const n = signalements().length
-    signaleesEtat.textContent = n === 0 ? 'Aucune figure signalée.' : n === 1 ? '1 figure signalée.' : `${n} figures signalées.`
+    const liste = signalements()
+    const n = liste.length
+    signaleesEtat.textContent = resumeSignalements(liste)
     $('signalees-exporter').disabled = n === 0
     boutonVider.disabled = n === 0
     annulerVidage()

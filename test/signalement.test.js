@@ -13,7 +13,7 @@ import {
   figureEnTexte,
   versTexte,
 } from '../src/moteur/index.js'
-import { construireSignalement } from '../src/ui/signalement.js'
+import { construireSignalement, nettoyerTexte, resumeSignalements, RAISONS, MAX_TEXTE } from '../src/ui/signalement.js'
 import {
   MAX_SIGNALEMENTS,
   signalements,
@@ -213,4 +213,86 @@ test('stockage des signalements : sans stockage, rien ne casse', () => {
   assert.deepEqual(signalements(), [])
   ajouterSignalement({ version: 'x' })
   viderSignalements()
+})
+
+// --- Raison, texte libre, geste (BS22) -------------------------------------------
+
+test('signalement : raison, texte libre, geste, figure complexe ou non', () => {
+  const e = nouvellePartie({ graine: 4 })
+  for (const { id } of RAISONS) {
+    const s = viaJson(construireSignalement(e, { raison: id, texte: '  pas de place  ', geste: 'gardee' }))
+    assert.equal(s.raison, id)
+    assert.equal(s.texte, 'pas de place')
+    assert.equal(s.geste, 'gardee')
+    assert.equal(s.figure.complexe, figureComplexe(e.figure))
+    assert.equal(s.figure.depart, e.figure.depart)
+    assert.equal(s.bonus, e.bonus)
+  }
+  assert.deepEqual(RAISONS.map((r) => r.libelle), ['Infaisable', 'Trop simple pour 15000', 'Devrait valoir 15000', 'Trop difficile', 'Autre'])
+})
+
+test('signalement : sans raison ni geste, ou avec des valeurs inconnues, rien de faux n\'est gardé', () => {
+  const e = nouvellePartie({ graine: 4 })
+  const s = construireSignalement(e)
+  assert.equal(s.raison, null)
+  assert.equal(s.texte, '')
+  assert.equal(s.geste, 'refusee')
+  const t = construireSignalement(e, { raison: 'inventee', geste: 'autre', texte: 42 })
+  assert.equal(t.raison, null)
+  assert.equal(t.geste, 'refusee')
+  assert.equal(t.texte, '')
+})
+
+test('signalement : un texte libre très long est coupé, sans casser un caractère', () => {
+  assert.equal(nettoyerTexte('a'.repeat(5000)).length, MAX_TEXTE)
+  const emojis = nettoyerTexte('😀'.repeat(MAX_TEXTE + 50))
+  assert.equal(Array.from(emojis).length, MAX_TEXTE)
+  assert.ok(emojis.isWellFormed(), 'pas de demi-caractère')
+  const e = nouvellePartie({ graine: 4 })
+  assert.equal(construireSignalement(e, { texte: 'x'.repeat(2000) }).texte.length, MAX_TEXTE)
+})
+
+test('signalements : les deux gestes et les anciens se gardent, se relisent et s\'exportent', () => {
+  faussePile()
+  const e = nouvellePartie({ graine: 6 })
+  ajouterSignalement(construireSignalement(e, { raison: 'infaisable', geste: 'refusee' }))
+  ajouterSignalement(construireSignalement(e, { raison: 'trop-simple', texte: 'deux couleurs', geste: 'gardee' }))
+  const ancien = { date: '2026-11-01T00:00:00.000Z', version: 'v17', figure: { cases: [], depart: 10000 }, bonus: 9000, coups: 3, score: 40 }
+  ajouterSignalement(ancien)
+  const liste = signalements()
+  assert.equal(liste.length, 3)
+  assert.deepEqual(liste[2], ancien, 'un ancien signalement reste tel quel')
+  const exporte = JSON.parse(contenuSignalements())
+  assert.deepEqual(exporte.signalements.map((x) => x.geste), ['refusee', 'gardee', undefined])
+  assert.equal(exporte.signalements[1].texte, 'deux couleurs')
+  assert.equal(resumeSignalements(liste), '3 figures signalées (2 refusées, 1 gardée).')
+})
+
+test('resumeSignalements : libellés', () => {
+  const r = { geste: 'refusee' }
+  const g = { geste: 'gardee' }
+  assert.equal(resumeSignalements([]), 'Aucune figure signalée.')
+  assert.equal(resumeSignalements([r]), '1 figure signalée.')
+  assert.equal(resumeSignalements([{}, r]), '2 figures signalées.')
+  assert.equal(resumeSignalements([g]), '1 figure signalée (1 gardée).')
+  assert.equal(resumeSignalements([g, g]), '2 figures signalées (2 gardées).')
+  assert.equal(resumeSignalements([r, g]), '2 figures signalées (1 refusée, 1 gardée).')
+})
+
+test('les gestes : signaler seulement ne touche pas à la partie, refuser change la figure seulement', () => {
+  faussePile()
+  const depart = nouvellePartie({ graine: 9 })
+  const e = jouer(depart, ...premierCoup(depart))
+  const avant = JSON.stringify(exporterPartie(e))
+  // Signaler seulement : un enregistrement, la partie n'est pas touchée.
+  ajouterSignalement(construireSignalement(e, { raison: 'trop-simple', geste: 'gardee' }))
+  assert.equal(JSON.stringify(exporterPartie(e)), avant)
+  assert.equal(signalements().length, 1)
+  // Refuser : le signalement garde la figure refusée, la suivante change seule.
+  const suivant = changerFigure(e)
+  ajouterSignalement(construireSignalement(e, { raison: 'infaisable', geste: 'refusee' }))
+  assert.notEqual(cles(suivant.figure), cles(e.figure))
+  for (const champ of ['coups', 'score']) assert.equal(suivant[champ], e[champ])
+  assert.deepEqual(signalements()[1].figure.cases, e.figure.cases)
+  assert.equal(signalements().length, 2)
 })

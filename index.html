@@ -31,7 +31,7 @@
         <div id="figure-carre" aria-hidden="true"></div>
         <div id="figure-bas">
           <span id="figure-bonus">0</span>
-          <button id="figure-infaisable" type="button" aria-label="Figure infaisable" title="Figure infaisable">
+          <button id="figure-infaisable" type="button" aria-label="Signaler la figure" title="Signaler la figure">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l9 7-9 7V5Zm10 0h3v14h-3V5Z"/></svg>
           </button>
         </div>
@@ -52,6 +52,20 @@
         <p id="fin-score"></p>
         <p id="fin-record" hidden>Nouveau meilleur score !</p>
         <button id="fin-rejouer" class="gros" type="button">Rejouer</button>
+      </div>
+    </div>
+
+    <div id="signaler" class="voile" hidden>
+      <div class="fenetre fenetre-signaler" role="dialog" aria-modal="true" aria-labelledby="signaler-titre">
+        <h2 id="signaler-titre">Pourquoi ?</h2>
+        <div id="signaler-raisons" class="raisons" role="radiogroup" aria-labelledby="signaler-titre"></div>
+        <label class="libre" for="signaler-texte">Précision (facultatif)</label>
+        <textarea id="signaler-texte" rows="2" maxlength="500" autocomplete="off"></textarea>
+        <div class="gestes">
+          <button id="signaler-refuser" class="gros" type="button" disabled>Refuser la figure</button>
+          <button id="signaler-garder" type="button" disabled>Signaler seulement</button>
+          <button id="signaler-annuler" type="button">Annuler</button>
+        </div>
       </div>
     </div>
 
