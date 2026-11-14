@@ -11,8 +11,10 @@ import { tirerLigne } from './tirage.js'
 // ses couleurs, tirées librement). `figures: null` dans
 // les réglages coupe tout : ni figure, ni bonus, ni recoloriage.
 export const FIGURES = Object.freeze({
-  // Bonus de départ, le même pour toutes les figures.
+  // Bonus de départ d'une figure ordinaire, et d'une figure complexe (BS21 : 3 couleurs,
+  // 7 cases de large, ligne du haut incomplète ; voir `figureComplexe`).
   bonusDepart: 10000,
+  bonusDepartComplexe: 15000,
   // Ce que perd le bonus à chaque coup sur la grille.
   perteParCoup: 100,
   // Largeur du motif, en colonnes (jamais la grille entière : la ligne disparaîtrait).

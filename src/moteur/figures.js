@@ -8,7 +8,7 @@
 //
 // Une figure : { cases: [{ ligne, col, couleur }], depart }. Lignes (0 en haut, 1 en
 // bas) et colonnes sont relatives (la colonne de gauche vaut 0) ; `depart` est le
-// bonus de départ.
+// bonus de départ (plus haut pour une figure complexe, BS21).
 //
 // Pourquoi elle est faisable : chaque case de la ligne du haut a une case dessous
 // (aucun bloc en l'air), à la manière de la copie de ligne du jeu, et ses couleurs
@@ -75,6 +75,17 @@ function lireMotif(figure) {
     haut: hautParCol,
     couleurs: [...bas, ...haut].map((c) => c.couleur),
   }
+}
+
+// La figure est-elle complexe (BS21) : exactement 3 couleurs, 7 cases de large et une
+// ligne du haut incomplète (au moins un trou, ou une case de moins que le bas) ? Elle
+// démarre alors avec un plus gros bonus. Faux si le motif est illisible.
+export const LARGEUR_COMPLEXE = 7
+
+export function figureComplexe(figure) {
+  const motif = motifFigure(figure)
+  if (!motif || motif.largeur !== LARGEUR_COMPLEXE) return false
+  return new Set(motif.couleurs).size === 3 && motif.haut.includes(null)
 }
 
 // La figure est-elle dans le bon format pour ces réglages de figures ?
@@ -198,7 +209,9 @@ function composer(reglages, aleatoire) {
   const cases = []
   haut.forEach((c, col) => { if (c !== null) cases.push({ ligne: 0, col, couleur: c }) })
   bas.forEach((c, col) => cases.push({ ligne: 1, col, couleur: c }))
-  return { cases, depart: cfg.bonusDepart }
+  const figure = { cases, depart: cfg.bonusDepart }
+  if (figureComplexe(figure)) figure.depart = cfg.bonusDepartComplexe ?? cfg.bonusDepart
+  return figure
 }
 
 // Une rangée de `longueur` cases en autant de plages que de couleurs dans `ordre`,

@@ -13,6 +13,8 @@ import {
   figurePresente,
   figureValide,
   figureCoherente,
+  figureComplexe,
+  changerFigure,
   motifFigure,
   proposerFigure,
   tailleFigure,
@@ -368,7 +370,9 @@ test('proposition : la palette sort de toutes les couleurs, même absentes du je
 
 // --- Proposition : toujours une figure, construite pour être faisable ----------------
 
-test('proposition : une figure est toujours proposée, au bon format, avec 10000 de bonus', () => {
+const departAttendu = (f) => (figureComplexe(f) ? 15000 : 10000)
+
+test('proposition : une figure est toujours proposée, au bon format, avec son bonus de départ (10000, ou 15000 si complexe)', () => {
   const largeurs = new Set()
   const couleurs = new Set()
   for (let g = 1; g <= 150; g++) {
@@ -376,8 +380,8 @@ test('proposition : une figure est toujours proposée, au bon format, avec 10000
     const f = e.figure
     assert.ok(f, `graine ${g} : pas de figure`)
     assert.ok(figureValide(f, REGLAGES.figures), `graine ${g} : format`)
-    assert.equal(f.depart, 10000)
-    assert.equal(e.bonus, 10000)
+    assert.equal(f.depart, departAttendu(f))
+    assert.equal(e.bonus, departAttendu(f))
     assert.equal(figurePresente(f, e.blocs, e.reglages.lignes, e.reglages.colonnes), false, `graine ${g} : déjà faite`)
     // Ligne du bas de 6 ou 7 cases d'affilée, aucun trou (la ligne du haut : voir BS14 plus bas).
     const bas = f.cases.filter((c) => c.ligne === 1).sort((a, b) => a.col - b.col)
@@ -396,7 +400,7 @@ test('proposition : jamais « rien » en cours de partie, à chaque coup', () =>
     for (const { apres: e } of partie(g, 80, REGLAGES)) {
       assert.ok(e.figure, `graine ${g}, coup ${e.coups}`)
       assert.ok(figureValide(e.figure, REGLAGES.figures))
-      assert.ok(e.bonus >= 0 && e.bonus <= 10000)
+      assert.ok(e.bonus >= 0 && e.bonus <= 15000)
       if (e.dernierCoup.figure.issue) assert.equal(e.bonus, e.figure.depart, 'nouvelle figure, bonus neuf')
       etats++
     }
@@ -482,8 +486,8 @@ test('partie gardée : une partie des figures de BS10 (schéma 2, petite figure 
   assert.equal(repris.score, e.score)
   assert.ok(repris.figure)
   assert.ok(figureValide(repris.figure, REGLAGES.figures), "l'ancienne figure n'est pas reprise")
-  assert.equal(repris.figure.depart, 10000)
-  assert.equal(repris.bonus, 10000)
+  assert.equal(repris.figure.depart, departAttendu(repris.figure))
+  assert.equal(repris.bonus, repris.figure.depart)
 })
 
 test('partie gardée : figures coupées, la figure gardée est laissée de côté ; réactivées, une neuve', () => {
@@ -619,4 +623,92 @@ test('BS18 : la capture décalée du joueur est cohérente et reconnue ; un ordr
   const inverse = figure2('VVPP', 'PPPVVV')
   assert.ok(figureValide(inverse, FIGURES), 'les anciennes restent valides')
   assert.equal(figureCoherente(inverse), false)
+})
+
+
+// --- Figures complexes (BS21) : 3 couleurs, 7 de large, ligne du haut incomplète ---------
+
+const AVEC = (haut, bas) => figure2(haut, bas)
+
+test('figure complexe : 3 couleurs, 7 de large, haut incomplet : oui', () => {
+  assert.equal(figureComplexe(AVEC('..JVVP.', 'JJPVVPP')), true, 'décalé')
+  assert.equal(figureComplexe(AVEC('JJ.VV.P', 'JJPPVVP')), true, 'à trous')
+  assert.equal(figureComplexe(AVEC('.JJPPVV', 'JJPPPVV')), true, 'une case de moins, collé à droite')
+})
+
+test('figure complexe : une condition manquante : non', () => {
+  assert.equal(figureComplexe(AVEC('JJPPVVV', 'JJPPVVV')), false, 'haut complet')
+  assert.equal(figureComplexe(AVEC('..JJPP.', 'JJJPPPP')), false, '2 couleurs')
+  assert.equal(figureComplexe(AVEC('..JJJJ.', 'JJJJJJJ')), false, '1 couleur')
+  assert.equal(figureComplexe(AVEC('..JJPP', 'JJPPVV')), false, '6 de large')
+  assert.equal(figureComplexe(AVEC('JJ.PP.', 'JJPPPV')), false, '6 de large, trous')
+  assert.equal(figureComplexe(AVEC('.JJPPVV.', 'JJPPVVOO')), false, '4 couleurs, 8 de large')
+  assert.equal(figureComplexe(AVEC('.JPVO.J', 'JJPPVVO')), false, '4 couleurs')
+})
+
+test('figure complexe : motif illisible : non', () => {
+  assert.equal(figureComplexe(null), false)
+  assert.equal(figureComplexe({}), false)
+  assert.equal(figureComplexe({ cases: [], depart: 10000 }), false)
+  assert.equal(figureComplexe(AVEC('JJ.....', 'JJ..VVP')), false, 'ligne du bas trouée')
+})
+
+test('figure complexe : le bonus de départ est 15000, ailleurs 10000, y compris après changerFigure', () => {
+  assert.equal(FIGURES.bonusDepart, 10000)
+  assert.equal(FIGURES.bonusDepartComplexe, 15000)
+  let vues = { complexe: 0, autre: 0 }
+  for (let g = 1; g <= 300; g++) {
+    let e = nouvellePartie({ graine: g })
+    for (let n = 0; n < 4; n++) {
+      const complexe = figureComplexe(e.figure)
+      assert.equal(e.figure.depart, complexe ? 15000 : 10000, `graine ${g}`)
+      assert.equal(e.bonus, e.figure.depart, `graine ${g}`)
+      vues[complexe ? 'complexe' : 'autre']++
+      const f = changerFigure(e)
+      assert.ok(f, `graine ${g}`)
+      e = f
+    }
+  }
+  assert.ok(vues.complexe > 0 && vues.autre > 0, JSON.stringify(vues))
+})
+
+// Une partie à l'instant d'une figure complexe qui va se faire.
+function complexeEnCours() {
+  return position(AVANT_FIGURE, { figure: { ...SIX, depart: 15000 } })
+}
+
+test('figure complexe : le bonus baisse de 100 par coup, et la réussite ajoute le reste', () => {
+  assert.equal(complexeEnCours().bonus, 15000)
+  const ref = faire(complexeEnCours())
+  assert.equal(ref.dernierCoup.figure.issue, 'reussie')
+  assert.equal(ref.dernierCoup.figure.gain, 14900)
+  assert.equal(ref.score, 14900)
+  assert.equal(ref.bonus, ref.figure.depart, 'la figure suivante repart de son propre départ')
+  const e = faire(position(AVANT_FIGURE, { figure: { ...AUTRE, depart: 15000 } }))
+  assert.equal(e.bonus, 14900)
+  assert.equal(e.score, 0)
+})
+
+test('partie gardée : une figure complexe garde son bonus restant, sans recalcul', () => {
+  let e = position(AVANT_FIGURE, { figure: { ...AUTRE, depart: 15000 } })
+  e = faire(e)
+  assert.equal(e.bonus, 14900)
+  const relue = importerPartie(JSON.parse(JSON.stringify(exporterPartie(e))), e.reglages)
+  assert.ok(relue)
+  assert.equal(relue.bonus, 14900)
+  assert.equal(relue.figure.depart, 15000)
+})
+
+test('proposition : 4 à 6 % des figures sont complexes, 15000 de départ pour elles seules', () => {
+  const aleatoire = alea(20261114)
+  const N = 24000
+  let complexes = 0
+  for (let i = 0; i < N; i++) {
+    const f = proposerFigure([], REGLAGES, aleatoire)
+    const complexe = figureComplexe(f)
+    assert.equal(f.depart, complexe ? 15000 : 10000)
+    if (complexe) complexes++
+  }
+  const part = complexes / N
+  assert.ok(part >= 0.04 && part <= 0.06, `part de figures complexes : ${(part * 100).toFixed(2)} %`)
 })

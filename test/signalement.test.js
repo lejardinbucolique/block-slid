@@ -9,6 +9,7 @@ import {
   importerPartie,
   changerFigure,
   figureValide,
+  figureComplexe,
   figureEnTexte,
   versTexte,
 } from '../src/moteur/index.js'
@@ -47,8 +48,9 @@ test('changerFigure : figure valide et autre, bonus de départ, tout le reste in
     assert.ok(f, `graine ${graine}`)
     assert.notEqual(cles(f.figure), cles(e.figure), `graine ${graine} : même figure`)
     assert.ok(figureValide(f.figure, REGLAGES.figures))
-    assert.equal(f.bonus, REGLAGES.figures.bonusDepart)
-    assert.equal(f.figure.depart, REGLAGES.figures.bonusDepart)
+    const depart = figureComplexe(f.figure) ? REGLAGES.figures.bonusDepartComplexe : REGLAGES.figures.bonusDepart
+    assert.equal(f.bonus, depart)
+    assert.equal(f.figure.depart, depart)
     for (const champ of ['coups', 'score', 'hasard', 'prochainId', 'finie']) assert.equal(f[champ], e[champ], champ)
     assert.deepEqual(f.blocs, e.blocs)
     assert.deepEqual(f.aVenir, e.aVenir)
