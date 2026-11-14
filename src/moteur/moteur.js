@@ -247,7 +247,23 @@ export function jouer(etat, id, dx) {
   if (!glisser(rangee, id, dx, e.reglages.colonnes)) return null
 
   e.coups++
-  const etapes = [instantane(e, 'glisse')]
+  return finirCoup(e, [instantane(e, 'glisse')])
+}
+
+// Passer le coup (BS20) : aucun bloc ne bouge, la ligne monte seule. C'est un coup
+// de grille comme les autres : mêmes règles de montée, de résolution, de secours,
+// de défaite, de bonus et de figure, par le même chemin que `jouer`. Seule
+// différence : pas d'étape 'glisse', puisqu'il n'y a pas de geste. Null si la partie est finie.
+export function passerCoup(etat) {
+  if (etat.finie) return null
+  const e = cloner(etat)
+  e.coups++
+  return finirCoup(e, [])
+}
+
+// Tout ce qui suit le geste du joueur, ou son absence : résolution du geste, secours,
+// montée de la ligne à venir, résolution, figure. Rend l'état suivant.
+function finirCoup(e, etapes) {
   const coup = { lignesEffacees: 0, points: 0, secours: null, defaite: false, etapes, figure: null }
   ajouter(coup, resoudre(e, etapes))
 

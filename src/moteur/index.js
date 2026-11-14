@@ -7,6 +7,7 @@ export {
   importerPartie,
   SCHEMA_PARTIE,
   jouer,
+  passerCoup,
   deplacerAVenir,
   deplacementsPossibles,
   glissement,

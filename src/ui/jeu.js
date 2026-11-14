@@ -15,6 +15,7 @@ import {
   exporterPartie,
   importerPartie,
   jouer,
+  passerCoup,
   deplacerAVenir,
   deplacementsPossibles,
   glissement,
@@ -81,6 +82,7 @@ export function demarrerJeu() {
   const figureEl = $('figure')
   const carreEl = $('figure-carre')
   const bonusEl = $('figure-bonus')
+  const passerEl = $('passer')
 
   // La partie gardée se reprend telle quelle, sauf si elle est perdue ou
   // illisible (autre version du jeu) : alors une nouvelle partie commence.
@@ -190,6 +192,7 @@ export function demarrerJeu() {
       for (const l of vue.lignes) pointsFlottants(l)
     }
     afficherScore(vue.score)
+    passerEl.disabled = etat.finie
     if (!vue.anime) afficherFigure()
   }
 
@@ -296,6 +299,27 @@ export function demarrerJeu() {
   }
 
   $('figure-infaisable').addEventListener('click', signalerFigure)
+
+  // Passer le coup (BS20) : la ligne monte sans qu'aucun bloc ne bouge. Un coup de grille
+  // comme un autre : même animation, même vibration, même sauvegarde. Comme pour un
+  // déplacement, toucher pendant l'animation d'un coup la termine d'abord.
+  function passer() {
+    if (geste || etat.finie || dialogueOuvert()) return
+    if (lecture) conclure({ coupe: true })
+    const suivant = passerCoup(etat)
+    if (!suivant) return
+    etat = suivant
+    garder()
+    vibrer(niveau)
+    if (!moinsDeMouvement?.matches) {
+      lireCoup(etat.dernierCoup.etapes)
+    } else {
+      afficher()
+      if (etat.finie) minuteurFin = setTimeout(afficherFin, DELAI_FIN_MS)
+    }
+  }
+
+  passerEl.addEventListener('click', passer)
 
   // --- Un coup, pas à pas ---------------------------------------------------
 
