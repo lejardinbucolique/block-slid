@@ -46,6 +46,8 @@
       </div>
     </div>
 
+    <div id="message" role="status" hidden></div>
+
     <div id="fin" class="voile" hidden>
       <div class="fenetre" role="dialog" aria-modal="true" aria-labelledby="fin-titre">
         <h2 id="fin-titre">Perdu</h2>
@@ -92,6 +94,11 @@
             <span>Figures à composer (bonus)</span>
           </label>
           <p>Un bonus à gagner en composant la figure montrée à droite du score. Il baisse à chaque coup.</p>
+        </div>
+
+        <div class="reglage">
+          <h3 id="styles-titre">Styles</h3>
+          <p id="styles-etat" aria-live="polite"></p>
         </div>
 
         <div class="reglage">

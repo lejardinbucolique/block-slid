@@ -452,6 +452,99 @@ button { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .bloc { transition-duration: .01s; }
   .bloc > i, #score.saut, #figure.gagne, #figure.expire { animation-duration: .01s; }
+  #blocs.restyle, #plateau[data-style] .bloc > i, #plateau[data-style] .bloc > i::after { animation-duration: .01s; animation-delay: 0s; }
 }
 
 #version { font-size: .8rem; opacity: .6; text-align: center; min-height: 1em; }
+
+/* --- Message discret : un nouveau style est débloqué (BS24) --------------------- */
+
+#message {
+  position: fixed;
+  left: 50%;
+  bottom: max(18px, calc(env(safe-area-inset-bottom) + 10px));
+  z-index: 5;
+  max-width: calc(100% - 32px);
+  padding: .5rem 1rem;
+  font-weight: 700;
+  font-size: .95rem;
+  text-align: center;
+  color: #fff;
+  background: rgba(8, 12, 32, .82);
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .2);
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: message 4s ease-in-out forwards;
+}
+#message[hidden] { display: none; }
+@keyframes message {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  8%, 88% { opacity: 1; transform: translate(-50%, 0); }
+  to { opacity: 0; }
+}
+
+/* --- Styles de blocs (BS24) ------------------------------------------------------
+   Un style change l'aspect de tout le plateau d'un coup (data-style sur #plateau) ;
+   « uni » est l'aspect de base ci-dessus. Les couleurs --c1/--c2 restent celles du bloc :
+   un style ne fait que les habiller, pour que la couleur reste lisible. */
+
+#blocs.restyle { animation: restyle .4s ease-out; }
+@keyframes restyle { from { opacity: .35; } }
+
+/* Laine : des mailles en V (jersey) sur la couleur du bloc, un relief doux et arrondi. */
+#plateau[data-style="laine"] .bloc {
+  --maille: calc(var(--ch) * .38);
+  --relief: inset 0 3px 4px rgba(255, 255, 255, .22), inset 0 -4px 6px rgba(0, 0, 0, .3), 0 2px 3px rgba(0, 0, 0, .35);
+}
+#plateau[data-style="laine"] .bloc.a1,
+#plateau[data-style="laine"] .bloc.a2 {
+  --maille: calc(var(--ch) * .26);
+  --relief: inset 0 2px 2px rgba(255, 255, 255, .22), inset 0 -2px 3px rgba(0, 0, 0, .3);
+}
+#plateau[data-style="laine"] .bloc > i {
+  border-radius: 7px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M1.6 3.4 6 9.6l4.4-6.2' fill='none' stroke='%23000' stroke-opacity='.28' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round' transform='translate(0 1.2)'/%3E%3Cpath d='M1.6 3.4 6 9.6l4.4-6.2' fill='none' stroke='%23fff' stroke-opacity='.5' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") 0 0 / var(--maille) var(--maille),
+    linear-gradient(160deg, var(--c1), var(--c2));
+  box-shadow: var(--relief), var(--anneau, 0 0 0 0 transparent);
+}
+#plateau[data-style="laine"] .bloc.a1 > i,
+#plateau[data-style="laine"] .bloc.a2 > i { border-radius: 4px; }
+#plateau[data-style="laine"] .bloc.tire > i { --anneau: 0 4px 8px rgba(0, 0, 0, .45); }
+#plateau[data-style="laine"] .bloc.refus > i { --anneau: 0 0 0 2px #ff4d4d; }
+#plateau[data-style="laine"] .bloc.mobile > i { --anneau: 0 0 0 1.5px rgba(255, 255, 255, .8); }
+#plateau[data-style="laine"] .bloc.a2.mobile > i { --anneau: 0 0 0 1px rgba(255, 255, 255, .5); }
+
+/* La ligne pleine : un fil de laine la parcourt de gauche à droite et la tricote. */
+#plateau[data-style="laine"] .bloc.allume > i { animation: laine-allume var(--duree, .3s) ease-in-out; }
+@keyframes laine-allume { 50% { filter: brightness(1.3); } }
+#plateau[data-style="laine"] .bloc.allume > i::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 34%;
+  height: 32%;
+  border-radius: 999px;
+  background:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, .92) 0 3px, rgba(255, 255, 255, .45) 3px 6px),
+    var(--c1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+  transform-origin: left center;
+  animation: laine-fil calc(var(--duree, .3s) * .55) ease-out both;
+  animation-delay: calc(var(--col, 0) / var(--cols, 7) * var(--duree, .3s) * .45);
+}
+@keyframes laine-fil { from { transform: scaleX(0); } }
+
+/* Puis la bande tricotée s'aplatit, s'enroule vers la droite et disparaît. */
+#plateau[data-style="laine"] .bloc.efface > i {
+  transform-origin: right center;
+  animation: laine-efface calc(var(--duree, .26s) * .7) ease-in both;
+  animation-delay: calc((var(--cols, 7) - var(--col, 0) - 1) / var(--cols, 7) * var(--duree, .26s) * .3);
+}
+@keyframes laine-efface {
+  35% { transform: scaleY(.4); }
+  to { transform: translateX(80%) scaleY(.4) rotate(70deg) scaleX(.3); opacity: 0; }
+}
+#plateau.instant .bloc > i::after { animation: none !important; }

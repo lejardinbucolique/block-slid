@@ -40,7 +40,10 @@ import {
   ajouterSignalement,
   viderSignalements,
   contenuSignalements,
+  styleGarde,
+  retenirStyle,
 } from './stockage.js'
+import { choisirStyle, stylesDebloques, nouveauxStyles, styleAutorise, resumeStyles } from './styles.js'
 import { construireSignalement, resumeSignalements, RAISONS } from './signalement.js'
 
 // Mise en page, en multiples de la hauteur d'une ligne (jamais figée : elle se
@@ -67,6 +70,7 @@ const DUREE_GAIN_MS = 1200 // le bonus d'une figure réussie, au milieu de la gr
 const REGLAGES_SANS_FIGURES = Object.freeze({ ...REGLAGES, figures: null })
 const reglagesPour = (figures) => (figures ? REGLAGES : REGLAGES_SANS_FIGURES)
 const ELASTIQUE_MAX_PX = 7
+const DUREE_MESSAGE_MS = 4000 // « Nouveau style » reste à l'écran le temps de se lire
 
 const $ = (id) => document.getElementById(id)
 
@@ -90,6 +94,10 @@ export function demarrerJeu() {
   const gardee = importerPartie(partieGardee(), reglagesPour(figures))
   let etat = gardee && !gardee.finie ? gardee : nouvellePartie({ reglages: reglagesPour(figures) })
   let meilleur = meilleurScore()
+  // Le style des blocs (BS24) : du décor, tiré avec Math.random et jamais avec le hasard de la partie.
+  let style = styleAutorise(styleGarde(), meilleur)
+  plateau.dataset.style = style
+  let minuteurMessage = null
   let niveau = niveauVibration()
   let geste = null
   let minuteurFin = null
@@ -117,6 +125,7 @@ export function demarrerJeu() {
     plateau.style.height = `${yAvenir(1) + g.ph}px`
     plateau.style.setProperty('--cw', `${cw}px`)
     plateau.style.setProperty('--ch', `${ch}px`)
+    plateau.style.setProperty('--cols', String(colonnes))
     fond.style.width = `${cw * colonnes}px`
     fond.style.height = `${ch * lignes}px`
   }
@@ -142,6 +151,7 @@ export function demarrerJeu() {
     el.style.width = `${b.largeur * g.cw}px`
     el.style.height = `${zonePlace === 'grille' ? g.ch : g.ph}px`
     el.style.transform = `translate(${b.col * g.cw}px, ${y}px)`
+    el.style.setProperty('--col', String(b.col)) // l'animation d'un style s'étale de colonne en colonne
     el.classList.remove('glisse', 'tire', 'refus', 'allume')
     el.classList.toggle('a1', zonePlace === 'a1')
     el.classList.toggle('a2', zonePlace === 'a2')
@@ -261,11 +271,40 @@ export function demarrerJeu() {
       scoreEl.classList.add('saut')
     }
     if (score > meilleur) {
+      const avant = meilleur
       meilleur = score
       retenirMeilleurScore(meilleur)
+      const nouveaux = nouveauxStyles(avant, meilleur)
+      if (nouveaux.length) annoncerStyle(nouveaux)
     }
     meilleurEl.textContent = String(meilleur)
   }
+
+  // Un style de plus à portée : un petit message discret, qui s'en va seul.
+  function annoncerStyle(nouveaux) {
+    const message = $('message')
+    message.textContent = `Nouveau style : ${nouveaux.map((s) => s.nom).join(', ')}`
+    message.hidden = false
+    clearTimeout(minuteurMessage)
+    minuteurMessage = setTimeout(() => { message.hidden = true }, DUREE_MESSAGE_MS)
+  }
+
+  // Figure réussie : toute la grille prend un autre style, tiré parmi les débloqués
+  // (le style actuel exclu). Sans autre style à montrer, rien ne change.
+  function changerStyle() {
+    const suivant = choisirStyle(stylesDebloques(meilleur), style, Math.random)
+    if (suivant === style) return
+    style = suivant
+    retenirStyle(style)
+    plateau.dataset.style = style
+    afficherStyles()
+    if (moinsDeMouvement?.matches) return
+    conteneur.classList.remove('restyle')
+    void conteneur.offsetWidth
+    conteneur.classList.add('restyle')
+  }
+
+  const figureReussie = () => etat.dernierCoup?.figure?.issue === 'reussie'
 
   function sansAnimation(fn) {
     plateau.classList.add('instant')
@@ -379,6 +418,7 @@ export function demarrerJeu() {
       lireCoup(etat.dernierCoup.etapes)
     } else {
       afficher()
+      if (figureReussie()) changerStyle()
       if (etat.finie) minuteurFin = setTimeout(afficherFin, DELAI_FIN_MS)
     }
   }
@@ -432,6 +472,7 @@ export function demarrerJeu() {
       afficher({ animer: false })
     }
     plateau.style.removeProperty('--duree')
+    if (figure?.issue === 'reussie') changerStyle()
     if (figure) animerFigure(figure)
     if (etat.finie && minuteurFin === null) minuteurFin = setTimeout(afficherFin, DELAI_FIN_MS)
   }
@@ -526,6 +567,7 @@ export function demarrerJeu() {
       lireCoup(etat.dernierCoup.etapes)
     } else {
       afficher()
+      if (place === 'grille' && figureReussie()) changerStyle()
       if (etat.finie) minuteurFin = setTimeout(afficherFin, DELAI_FIN_MS)
     }
   }
@@ -616,6 +658,11 @@ export function demarrerJeu() {
     afficherFigure()
   })
 
+  // Les styles de blocs : combien sont débloqués, et le prochain palier s'il en reste un.
+  function afficherStyles() {
+    $('styles-etat').textContent = resumeStyles(meilleur)
+  }
+
   // Les figures signalées : leur nombre, l'export en fichier et le vidage (en deux touchers).
   const signaleesEtat = $('signalees-etat')
   const boutonVider = $('signalees-vider')
@@ -672,6 +719,7 @@ export function demarrerJeu() {
   function ouvrirReglages() {
     if (!fin.hidden) return
     afficherSignalees()
+    afficherStyles()
     reglages.hidden = false
     $('reglages-fermer').focus()
   }
@@ -703,6 +751,7 @@ export function demarrerJeu() {
 
   afficherVibration()
   afficherSignalees()
+  afficherStyles()
   mesurer()
   sansAnimation(() => afficher({ animer: false }))
   garder() // une partie neuve est gardée dès son premier état affiché

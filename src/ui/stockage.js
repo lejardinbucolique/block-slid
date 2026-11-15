@@ -3,11 +3,14 @@
 // Le stockage peut manquer ou refuser (navigation privée) : le jeu marche alors
 // sans rien retenir.
 
+import { styleLu } from './styles.js'
+
 const CLE_MEILLEUR = 'block-slid.meilleur'
 const CLE_VIBRATION = 'block-slid.vibration'
 const CLE_PARTIE = 'block-slid.partie'
 const CLE_FIGURES = 'block-slid.figures'
 const CLE_SIGNALEMENTS = 'block-slid.signalements'
+const CLE_STYLE = 'block-slid.style'
 
 function lire(cle) {
   try { return localStorage.getItem(cle) } catch { return null }
@@ -38,6 +41,11 @@ export const retenirNiveauVibration = (niveau) => ecrire(CLE_VIBRATION, niveau)
 // Les figures à composer (BS10) : actives tant qu'on ne les a pas coupées.
 export const figuresActivees = () => lire(CLE_FIGURES) !== '0'
 export const retenirFiguresActivees = (actif) => ecrire(CLE_FIGURES, actif ? '1' : '0')
+
+// Le style de blocs en cours (BS24) : lecture tolérante, tout ce qui n'est pas un
+// style connu vaut « uni ». Le format de la partie gardée n'en sait rien.
+export const styleGarde = () => styleLu(lire(CLE_STYLE))
+export const retenirStyle = (id) => ecrire(CLE_STYLE, id)
 
 // La partie en cours, en données simples (exporterPartie), sans date limite :
 // elle reste jusqu'à ce qu'elle se termine ou qu'on en commence une autre.
