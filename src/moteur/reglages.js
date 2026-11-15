@@ -23,12 +23,21 @@ export const FIGURES = Object.freeze({
   // entre sa première et sa dernière case, faite de cases du bas dans leur ordre (BS18) ; la
   // `chanceIncomplete` : la part des figures qui en ont une (sinon, deux lignes
   // identiques). Défaut à confirmer en jouant.
-  haut: Object.freeze({ min: 4, trousMax: 2, chanceIncomplete: 0.5 }),
+  haut: Object.freeze({ min: 4, trousMax: 2, chanceIncomplete: 0.65 }),
   // Couleurs différentes au plus dans une même figure.
   couleursMax: 3,
-  // Nombre de couleurs d'une figure neuve (BS16) : un poids par nombre. 2 couleurs
-  // le plus souvent ; moins mélangées, les figures sont plus faciles à composer.
-  poidsCouleurs: Object.freeze({ 1: 2, 2: 6, 3: 2 }),
+  // Nombre de couleurs d'une figure neuve (BS16, rééquilibré en BS23) : un poids par
+  // nombre. 2 couleurs le plus souvent ; moins mélangées, les figures sont plus faciles
+  // à composer, mais une seule couleur revenait trop (20 %, ici 8 %).
+  poidsCouleurs: Object.freeze({ 1: 8, 2: 67, 3: 25 }),
+  // Largeur (BS23) : la chance que la figure soit de la plus grande largeur (7), selon son
+  // nombre de couleurs ; les figures à 3 couleurs sont plus souvent larges, ce qui fait
+  // plus de figures complexes (BS21) sans que les autres deviennent plus dures.
+  chanceLarge: Object.freeze({ 1: 0.5, 2: 0.5, 3: 0.7 }),
+  // Avec 2 couleurs, la chance que la ligne du bas soit A B A (3 plages) plutôt que A B,
+  // selon la largeur : 6 colonnes n'ont qu'un découpage à 3 plages (2+2+2), qu'il ne
+  // faut pas surcharger.
+  chanceABA: Object.freeze({ 6: 0.12, 7: 0.3 }),
   // Recoloriage (BS15) : les lignes qui arrivent gardent la forme tirée ; parmi
   // leurs seuls blocs d'une case, jusqu'à `blocs` prennent les couleurs qui
   // manquent le plus à la figure, un de plus avec la chance `chancePlus`. La

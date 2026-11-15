@@ -584,9 +584,9 @@ test('figures neuves : des plages de 2 cases au moins, 3 couleurs au plus, répa
     assert.ok(nb <= 3)
     compte[nb]++
   }
-  assert.ok(compte[2] / N > 0.5 && compte[2] / N < 0.7, JSON.stringify(compte))
-  assert.ok(compte[1] / N > 0.12 && compte[1] / N < 0.28, JSON.stringify(compte))
-  assert.ok(compte[3] / N > 0.12 && compte[3] / N < 0.28, JSON.stringify(compte))
+  assert.ok(compte[2] / N > 0.55 && compte[2] / N < 0.75, JSON.stringify(compte))
+  assert.ok(compte[1] / N > 0.05 && compte[1] / N < 0.12, JSON.stringify(compte))
+  assert.ok(compte[3] / N > 0.18 && compte[3] / N < 0.35, JSON.stringify(compte))
 })
 
 test('figures anciennes très mélangées : toujours valides et reconnues', () => {
@@ -699,7 +699,7 @@ test('partie gardée : une figure complexe garde son bonus restant, sans recalcu
   assert.equal(relue.figure.depart, 15000)
 })
 
-test('proposition : 4 à 6 % des figures sont complexes, 15000 de départ pour elles seules', () => {
+test('proposition : 9 à 13 % des figures sont complexes, 15000 de départ pour elles seules', () => {
   const aleatoire = alea(20261114)
   const N = 24000
   let complexes = 0
@@ -710,5 +710,68 @@ test('proposition : 4 à 6 % des figures sont complexes, 15000 de départ pour e
     if (complexe) complexes++
   }
   const part = complexes / N
-  assert.ok(part >= 0.04 && part <= 0.06, `part de figures complexes : ${(part * 100).toFixed(2)} %`)
+  assert.ok(part >= 0.09 && part <= 0.13, `part de figures complexes : ${(part * 100).toFixed(2)} %`)
+})
+
+// --- Figures plus variées (BS23) ------------------------------------------------------
+
+// Le découpage du bas en plages, « 2+2+3 » ; la forme, couleurs renommées A, B, C dans l'ordre.
+const decoupage = (m) => plagesDe(m.bas).map(([, n]) => n).join('+')
+function formeMotif(m) {
+  const noms = new Map()
+  const lettre = (c) => (c === null ? '.' : (noms.has(c) || noms.set(c, 'ABC'[noms.size]), noms.get(c)))
+  return `${m.bas.map(lettre).join('')}/${m.haut.map(lettre).join('')}`
+}
+
+test('BS23 : sur 24000 figures (graines fixes), la répartition est plus variée, toutes valides et cohérentes', () => {
+  const N = 600
+  const K = 40
+  const cou = {}
+  const dec = {}
+  const formes = {}
+  let total = 0
+  let sept = 0
+  let incompletes = 0
+  let complexes = 0
+  const plus = (o, k) => { o[k] = (o[k] ?? 0) + 1 }
+  for (let g = 1; g <= N; g++) {
+    let e = nouvellePartie({ graine: g })
+    for (let i = 0; i < K; i++) {
+      const f = e.figure
+      assert.ok(figureValide(f, FIGURES) && figureCoherente(f), `graine ${g}, figure ${i}`)
+      const m = motifFigure(f)
+      assert.ok(plagesDe(m.bas).every(([, n]) => n >= 2) && plagesDe(m.bas).length <= 3, `plages ${m.bas}`)
+      total++
+      plus(cou, new Set(m.couleurs).size)
+      plus(dec, decoupage(m))
+      plus(formes, formeMotif(m))
+      if (m.largeur === 7) sept++
+      if (m.haut.includes(null)) incompletes++
+      if (figureComplexe(f)) complexes++
+      const suivante = changerFigure(e)
+      assert.notDeepEqual(suivante.figure.cases, f.cases, `graine ${g}, figure ${i} : la même figure revient`)
+      e = suivante
+    }
+  }
+  assert.equal(total, 24000)
+  const part = (n) => n / total
+  assert.ok(part(cou[1]) >= 0.06 && part(cou[1]) <= 0.10, `une couleur : ${JSON.stringify(cou)}`)
+  assert.ok(part(cou[3]) <= 0.35, `trois couleurs : ${JSON.stringify(cou)}`)
+  assert.ok(part(sept) <= 0.60, `7 colonnes : ${part(sept)}`)
+  assert.ok(part(incompletes) >= 0.60 && part(incompletes) <= 0.70, `haut incomplet : ${part(incompletes)}`)
+  assert.ok(part(complexes) >= 0.09 && part(complexes) <= 0.13, `complexes : ${part(complexes)}`)
+  const pire = Object.entries(dec).sort((a, b) => b[1] - a[1])[0]
+  assert.ok(part(pire[1]) <= 0.15, `découpage trop fréquent : ${pire}`)
+  assert.ok(part(dec['2+2+2']) >= 0.09 && part(dec['2+2+2']) <= 0.15, `2+2+2 : ${part(dec['2+2+2'])}`)
+  const classees = Object.values(formes).sort((a, b) => b - a)
+  const dix = classees.slice(0, 10).reduce((t, n) => t + n, 0)
+  assert.ok(part(dix) <= 0.28, `les 10 formes les plus fréquentes : ${part(dix)}`)
+  assert.ok(classees.length >= 2113, `formes distinctes : ${classees.length}`)
+})
+
+test('BS23 : le tirage reste déterminé par la graine', () => {
+  for (let g = 1; g <= 30; g++) {
+    assert.deepEqual(nouvellePartie({ graine: g }).figure, nouvellePartie({ graine: g }).figure)
+    assert.deepEqual(proposerFigure([], REGLAGES, alea(g)), proposerFigure([], REGLAGES, alea(g)))
+  }
 })

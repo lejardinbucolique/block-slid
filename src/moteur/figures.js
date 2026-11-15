@@ -165,24 +165,31 @@ export function proposerFigure(blocs, reglages, aleatoire) {
   return figure
 }
 
-// Une figure : la largeur, 1 à 3 couleurs tirées parmi celles du jeu, au poids de
-// `poidsCouleurs` (BS16). Les rangées sont faites de plages : des cases voisines de
-// même couleur, au moins 2 par plage, deux plages voisines de couleurs différentes,
-// au plus 3 plages en bas et 2 en haut. Pas de couleurs alternées case par case, qui
-// demandaient de poser les blocs d'une case dans un ordre exact. Avec la chance
-// `haut.chanceIncomplete`, la ligne du haut est incomplète (taille et place au hasard,
-// cases du bas gardées dans leur ordre, posées avec au plus
-// `trousMax` trous, éventuellement décalées) ; sinon elle recopie celle du bas. `figureValide` ne vérifie
+// Une figure : 1 à 3 couleurs au poids de `poidsCouleurs` (BS16, rééquilibré en BS23), la
+// largeur (la plus large avec la chance `chanceLarge` du nombre de couleurs : les figures
+// à 3 couleurs sont plus souvent à 7 colonnes), 3 couleurs tirées parmi celles du jeu. Les
+// rangées sont faites de plages : des cases voisines de même couleur, au moins 2 par
+// plage, deux plages voisines de couleurs différentes, au plus 3 plages en bas. Le
+// découpage est tiré à égalité parmi ceux qui conviennent (BS23), et avec 2 couleurs la
+// rangée est A B A avec la chance `chanceABA` de sa largeur. Pas de couleurs alternées
+// case par case, qui demandaient de poser les blocs d'une case dans un ordre exact. Avec
+// la chance `haut.chanceIncomplete`, la ligne du haut est incomplète (taille et place au
+// hasard, cases du bas gardées dans leur ordre, posées avec au plus `trousMax` trous,
+// éventuellement décalées) ; sinon elle recopie celle du bas. `figureValide` ne vérifie
 // pas les plages : les parties gardées avec une figure d'avant se rouvrent telles quelles.
 function composer(reglages, aleatoire) {
   const cfg = reglages.figures
   const entre = (a, b) => a + Math.floor(aleatoire() * (b - a + 1))
-  const largeur = cfg.largeurs[entre(0, cfg.largeurs.length - 1)]
   const max = Math.min(cfg.couleursMax, reglages.couleurs.length, 3)
   const nb = auPoids(aleatoire, cfg.poidsCouleurs, max)
+  const larges = cfg.largeurs.length - 1
+  const chanceLarge = cfg.chanceLarge?.[nb]
+  const largeur = chanceLarge === undefined
+    ? cfg.largeurs[entre(0, larges)]
+    : cfg.largeurs[aleatoire() < chanceLarge ? larges : entre(0, Math.max(0, larges - 1))]
   const palette = melanger(aleatoire, [...reglages.couleurs]).slice(0, nb)
-  // Bas : une plage par couleur, ou A B A avec 2 couleurs une fois sur deux.
-  const ordre = nb === 2 && largeur >= 6 && aleatoire() < 0.5 ? [palette[0], palette[1], palette[0]] : palette
+  // Bas : une plage par couleur, ou A B A avec 2 couleurs.
+  const ordre = nb === 2 && aleatoire() < (cfg.chanceABA?.[largeur] ?? 0.5) ? [palette[0], palette[1], palette[0]] : palette
   const bas = plages(aleatoire, largeur, ordre)
   let haut = bas
   if (aleatoire() < cfg.haut.chanceIncomplete) {
@@ -215,10 +222,17 @@ function composer(reglages, aleatoire) {
 }
 
 // Une rangée de `longueur` cases en autant de plages que de couleurs dans `ordre`,
-// chacune d'au moins 2 cases, le reste réparti au hasard.
+// chacune d'au moins 2 cases ; le découpage est tiré à égalité parmi tous ceux qui
+// conviennent (7 en 2+2+3, 2+3+2 ou 3+2+2, par exemple).
 function plages(aleatoire, longueur, ordre) {
-  const tailles = ordre.map(() => 2)
-  for (let reste = longueur - 2 * ordre.length; reste > 0; reste--) tailles[Math.floor(aleatoire() * tailles.length)]++
+  const decoupages = []
+  const poser = (reste, tailles) => {
+    const k = ordre.length - tailles.length
+    if (k === 1) { if (reste >= 2) decoupages.push([...tailles, reste]); return }
+    for (let t = 2; reste - t >= 2 * (k - 1); t++) poser(reste - t, [...tailles, t])
+  }
+  poser(longueur, [])
+  const tailles = decoupages[Math.floor(aleatoire() * decoupages.length)]
   return ordre.flatMap((c, i) => Array(tailles[i]).fill(c))
 }
 
