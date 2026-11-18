@@ -878,3 +878,112 @@ button { font: inherit; color: inherit; }
   35% { transform: rotate(60deg) scale(calc(.5 / var(--l, 1)), .5) skew(10deg, -8deg); border-radius: 45%; opacity: 1; }
   to { transform: translateY(-170%) rotate(260deg) scale(calc(.32 / var(--l, 1)), .32) skew(10deg, -8deg); border-radius: 50%; opacity: 0; }
 }
+
+/* Métal (BS30) : une plaque d'acier brossé, anodisée dans la couleur du bloc. Fines stries
+   horizontales de brossage, une bande de reflet en diagonale, arêtes biseautées claires en haut
+   et sombres en bas, une vis à chaque coin (une seule, ou aucune, sur les petits blocs). La
+   teinte reste franche : le métal ne fait que l'éclaircir ou l'assombrir par endroits. */
+#plateau[data-style="metal"] .bloc > i {
+  inset: 1.5px;
+  border-radius: 2px;
+  --vis: calc(min(var(--ch, 40px), 44px) * .13);
+  --tv: radial-gradient(circle closest-side at 42% 38%, #fff, color-mix(in srgb, var(--c1) 30%, #e8e8e8 70%) 35%, color-mix(in srgb, var(--c2) 35%, #444 65%) 85%, rgba(0, 0, 0, .6) 93%, transparent 100%);
+  background:
+    var(--tv) var(--vis) var(--vis) / calc(var(--vis) * 1.5) calc(var(--vis) * 1.5) no-repeat,
+    var(--tv) calc(100% - var(--vis)) var(--vis) / calc(var(--vis) * 1.5) calc(var(--vis) * 1.5) no-repeat,
+    var(--tv) var(--vis) calc(100% - var(--vis)) / calc(var(--vis) * 1.5) calc(var(--vis) * 1.5) no-repeat,
+    var(--tv) calc(100% - var(--vis)) calc(100% - var(--vis)) / calc(var(--vis) * 1.5) calc(var(--vis) * 1.5) no-repeat,
+    linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, .28) 42%, rgba(255, 255, 255, .08) 50%, transparent 58%, transparent 70%, rgba(255, 255, 255, .12) 76%, transparent 82%),
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, .07) 0 .5px, transparent .5px 1.5px, rgba(0, 0, 0, .06) 1.5px 2px, transparent 2px 2.7px),
+    repeating-linear-gradient(179.6deg, transparent 0 4.3px, rgba(255, 255, 255, .1) 4.3px 4.8px, transparent 4.8px 9.1px, rgba(0, 0, 0, .08) 9.1px 9.6px, transparent 9.6px 13.7px),
+    linear-gradient(180deg, color-mix(in srgb, var(--c1) 82%, #fff 18%), var(--c1) 40%, color-mix(in srgb, var(--c2) 90%, #000 10%));
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, .55),
+    inset 1.5px 0 0 rgba(255, 255, 255, .3),
+    inset -1.5px 0 0 rgba(0, 0, 0, .3),
+    inset 0 -2px 0 rgba(0, 0, 0, .4),
+    inset 0 0 0 3px color-mix(in srgb, var(--c1) 85%, #fff 15%),
+    0 1px 2px rgba(0, 0, 0, .55),
+    var(--anneau, 0 0 0 0 transparent);
+}
+/* Un bloc d'une cellule : une seule vis, au centre ; les barres à venir : aucune. */
+#plateau[data-style="metal"] .bloc[data-largeur="1"] > i {
+  background-image:
+    var(--tv), none, none, none,
+    linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, .28) 42%, rgba(255, 255, 255, .08) 50%, transparent 58%),
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, .09) 0 1px, transparent 1px 2px, rgba(0, 0, 0, .07) 2px 3px, transparent 3px 5px),
+    none,
+    linear-gradient(180deg, color-mix(in srgb, var(--c1) 82%, #fff 18%), var(--c1) 40%, color-mix(in srgb, var(--c2) 90%, #000 10%));
+  background-position: 50% 50%, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
+}
+#plateau[data-style="metal"] .bloc.a1 > i,
+#plateau[data-style="metal"] .bloc.a2 > i {
+  background:
+    linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, .28) 45%, transparent 60%),
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, .1) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, color-mix(in srgb, var(--c1) 82%, #fff 18%), var(--c1) 45%, var(--c2));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), inset 0 -1px 0 rgba(0, 0, 0, .4), var(--anneau, 0 0 0 0 transparent);
+}
+#plateau[data-style="metal"] .bloc.tire > i { --anneau: 0 4px 8px rgba(0, 0, 0, .5); }
+#plateau[data-style="metal"] .bloc.refus > i { --anneau: 0 0 0 2px #ff4d4d; }
+#plateau[data-style="metal"] .bloc.mobile > i { --anneau: 0 0 0 1.5px rgba(255, 255, 255, .85); }
+#plateau[data-style="metal"] .bloc.a2.mobile > i { --anneau: 0 0 0 1px rgba(255, 255, 255, .5); }
+
+/* La ligne pleine : un éclair de soudure la parcourt de gauche à droite, un point blanc-jaune
+   brûlant suivi d'un halo chaud, et la plaque vibre. */
+#plateau[data-style="metal"] .bloc.allume > i { animation: metal-allume var(--duree, .3s) ease-out; }
+@keyframes metal-allume { 30% { transform: translateY(-1px); } 50% { transform: translateY(.5px); } }
+#plateau[data-style="metal"] .bloc.allume > i::after {
+  content: "";
+  position: absolute;
+  inset: -20% -10%;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 22% 40% at 50% 50%, #fff 0 25%, #fff3b0 45%, rgba(255, 170, 40, .6) 70%, transparent),
+    linear-gradient(90deg, transparent, rgba(255, 200, 90, .45) 50%, transparent);
+  animation: metal-soudure var(--duree, .3s) ease-out both;
+  animation-delay: calc(var(--col, 0) / var(--cols, 7) * var(--duree, .3s) * .4);
+}
+@keyframes metal-soudure {
+  from { opacity: 0; transform: translateX(-45%) scaleX(.5); }
+  20% { opacity: 1; }
+  70% { opacity: .9; transform: translateX(45%) scaleX(1); }
+  to { opacity: 0; transform: translateX(45%) scaleX(1); }
+}
+
+/* Puis les étincelles jaillissent (::before, des points chauds emportés par un seul transform)
+   et la plaque, détachée, tombe en glissant de côté avant de s'estomper. */
+#plateau[data-style="metal"] .bloc.efface > i {
+  transform-origin: left top;
+  animation: metal-chute var(--duree, .26s) cubic-bezier(.5, 0, .9, .6) both;
+}
+@keyframes metal-chute {
+  15% { transform: translateY(0) rotate(0); opacity: 1; }
+  to { transform: translate(18%, 120%) rotate(9deg); opacity: 0; }
+}
+#plateau[data-style="metal"] .bloc.efface::before {
+  content: "";
+  position: absolute;
+  inset: -60% -15%;
+  pointer-events: none;
+  z-index: 2;
+  background:
+    radial-gradient(circle at 10% 25%, #fff6c0 2.1%, transparent 3.6%),
+    radial-gradient(circle at 25% 8%, #ffd34d 2.2%, transparent 3.8%),
+    radial-gradient(circle at 42% 18%, #fff 2.0%, transparent 3.4%),
+    radial-gradient(circle at 60% 5%, #ffb020 2.5%, transparent 4.1%),
+    radial-gradient(circle at 78% 15%, #fff6c0 2.1%, transparent 3.6%),
+    radial-gradient(circle at 92% 32%, #ffd34d 2.0%, transparent 3.4%),
+    radial-gradient(circle at 88% 72%, #ff9a1a 1.8%, transparent 3.2%),
+    radial-gradient(circle at 52% 88%, #ffd34d 1.8%, transparent 3.2%),
+    radial-gradient(circle at 18% 78%, #fff6c0 1.7%, transparent 3.1%),
+    radial-gradient(ellipse 40% 22% at 50% 50%, rgba(255, 230, 150, .7), transparent 70%);
+  animation: metal-etincelles var(--duree, .26s) cubic-bezier(.2, .7, .4, 1) both;
+  animation-delay: calc(var(--col, 0) / var(--cols, 7) * var(--duree, .26s) * .15);
+}
+@keyframes metal-etincelles {
+  from { opacity: 0; transform: scale(.35); }
+  15% { opacity: 1; }
+  to { opacity: 0; transform: scale(1.3) translateY(10%); }
+}
