@@ -25,6 +25,7 @@ export const STYLES = Object.freeze([
   Object.freeze({ id: 'papier', nom: 'Papier', palier: PALIERS[4] }),
   Object.freeze({ id: 'metal', nom: 'Métal', palier: PALIERS[5] }),
   Object.freeze({ id: 'verre', nom: 'Verre', palier: PALIERS[6] }),
+  Object.freeze({ id: 'marbre', nom: 'Marbre', palier: PALIERS[7] }),
 ])
 
 const connu = (id) => STYLES.some((s) => s.id === id)
