@@ -1188,3 +1188,87 @@ button { font: inherit; color: inherit; }
   25% { opacity: 1; }
   to { opacity: 0; transform: scale(1.4) translateY(-12%); }
 }
+
+/* Néon (BS33) : un tube de néon plié autour du bloc. L'intérieur est sombre mais teinté franc de
+   sa couleur (assez pour que bleu et bleu clair, jaune et orange se distinguent), cerclé d'un
+   trait épais au cœur presque blanc, bordé de sa couleur, avec un halo court qui ne déborde pas
+   sur le voisin ; un second trait fin court à l'intérieur. Ni filtre ni calcul : des ombres. */
+#plateau[data-style="neon"] .bloc > i {
+  inset: 3px;
+  border-radius: calc(var(--ch, 40px) * .22);
+  border: 2px solid color-mix(in srgb, var(--c1) 35%, #fff 65%);
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 50%, color-mix(in srgb, var(--c2) 30%, #08080f 70%), transparent 90%),
+    color-mix(in srgb, var(--c2) 55%, #08080f 45%);
+  box-shadow:
+    0 0 0 1.5px var(--c1),
+    0 0 4px 1px var(--c1),
+    inset 0 0 0 1.5px var(--c1),
+    inset 0 0 6px 2px color-mix(in srgb, var(--c1) 75%, transparent),
+    var(--anneau, 0 0 0 0 transparent);
+}
+/* Le second tube, plus fin, à l'intérieur. */
+#plateau[data-style="neon"] .bloc > i::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: calc(var(--ch, 40px) * .1);
+  border: 1px solid color-mix(in srgb, var(--c1) 60%, #fff 40%);
+  box-shadow: 0 0 3px color-mix(in srgb, var(--c1) 70%, transparent);
+  opacity: .75;
+  pointer-events: none;
+}
+#plateau[data-style="neon"] .bloc.a1 > i,
+#plateau[data-style="neon"] .bloc.a2 > i {
+  inset: 1px;
+  border-width: 1.5px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px var(--c1), inset 0 0 4px color-mix(in srgb, var(--c1) 60%, transparent), var(--anneau, 0 0 0 0 transparent);
+}
+#plateau[data-style="neon"] .bloc.a1 > i::after,
+#plateau[data-style="neon"] .bloc.a2 > i::after { display: none; }
+#plateau[data-style="neon"] .bloc.tire > i { --anneau: 0 0 10px 2px color-mix(in srgb, var(--c1) 60%, transparent); }
+#plateau[data-style="neon"] .bloc.refus > i { --anneau: 0 0 0 3px #ff4d4d; }
+#plateau[data-style="neon"] .bloc.mobile > i { --anneau: 0 0 0 2.5px rgba(255, 255, 255, .85); }
+#plateau[data-style="neon"] .bloc.a2.mobile > i { --anneau: 0 0 0 2px rgba(255, 255, 255, .5); }
+
+/* La ligne pleine grille : trois ou quatre sautes de lumière, décalées de colonne en colonne
+   comme un tube qui hésite. */
+#plateau[data-style="neon"] .bloc.allume > i {
+  animation: neon-grille var(--duree, .3s) linear both;
+  animation-delay: calc(var(--col, 0) / var(--cols, 7) * var(--duree, .3s) * .25);
+}
+@keyframes neon-grille {
+  0%, 12% { opacity: 1; }
+  14%, 22% { opacity: .3; }
+  24%, 40% { opacity: 1; }
+  42%, 48% { opacity: .45; }
+  50%, 66% { opacity: 1; }
+  68%, 74% { opacity: .2; }
+  76%, 100% { opacity: 1; }
+}
+/* Puis le halo enfle (le ::after, mis en grand halo), tout s'éteint d'un coup, et une rémanence
+   pâle de la forme s'estompe. */
+#plateau[data-style="neon"] .bloc.efface > i {
+  animation: neon-eteint var(--duree, .26s) linear both;
+}
+@keyframes neon-eteint {
+  0% { opacity: 1; transform: none; }
+  30% { opacity: 1; transform: scale(1.07); }
+  31% { opacity: .08; transform: scale(1); }
+  45% { opacity: .3; }
+  100% { opacity: 0; }
+}
+#plateau[data-style="neon"] .bloc.efface > i::after {
+  inset: -4px;
+  border-radius: calc(var(--ch, 40px) * .3);
+  border: 0;
+  background: color-mix(in srgb, var(--c1) 45%, transparent);
+  box-shadow: 0 0 8px 2px color-mix(in srgb, var(--c1) 55%, transparent);
+  animation: neon-halo var(--duree, .26s) ease-out both;
+}
+@keyframes neon-halo {
+  0% { opacity: 0; transform: scale(.9); }
+  28% { opacity: 1; transform: scale(1.1); }
+  31%, 100% { opacity: 0; transform: scale(1.1); }
+}
