@@ -822,3 +822,59 @@ button { font: inherit; color: inherit; }
 }
 #plateau[data-style="bonbon"] .bloc.a1 > i,
 #plateau[data-style="bonbon"] .bloc.a2 > i { border-radius: 999px; }
+
+/* Papier (BS29) : papier de couleur plié, façon origami. Mat, sans reflet ; deux plis en
+   diagonale partagent chaque cellule en facettes de tons voisins (une claire, une moyenne, une
+   ombrée), un liseré clair marque l'arête du pli, des fibres très fines croisées, une ombre
+   courte et nette. La couleur reste franche : les facettes ne s'en écartent que de peu. */
+#plateau[data-style="papier"] .bloc > i {
+  inset: 1.5px;
+  border-radius: 1px;
+  --pl: color-mix(in srgb, var(--c1) 88%, #fff 12%);
+  --pm: color-mix(in srgb, var(--c1) 70%, var(--c2) 30%);
+  --po: color-mix(in srgb, var(--c2) 92%, #000 8%);
+  background:
+    repeating-linear-gradient(17deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(103deg, rgba(0, 0, 0, .03) 0 1px, transparent 1px 4px),
+    linear-gradient(to bottom left, transparent calc(50% - .5px), rgba(255, 255, 255, .55) 50%, rgba(0, 0, 0, .12) calc(50% + 1px), transparent calc(50% + 4px)),
+    linear-gradient(to bottom left, var(--pl) 50%, var(--pm) 50%, var(--po) 130%);
+  background-size: auto, auto, var(--cw, 40px) 100%, var(--cw, 40px) 100%;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, .4),
+    inset -1px -1px 0 rgba(0, 0, 0, .15),
+    1.5px 2px 0 rgba(0, 0, 0, .3),
+    var(--anneau, 0 0 0 0 transparent);
+}
+#plateau[data-style="papier"] .bloc.a1 > i,
+#plateau[data-style="papier"] .bloc.a2 > i {
+  background:
+    linear-gradient(to bottom left, var(--pl) 50%, var(--pm) 50%);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, .3), 1px 1px 0 rgba(0, 0, 0, .25), var(--anneau, 0 0 0 0 transparent);
+}
+#plateau[data-style="papier"] .bloc.tire > i { --anneau: 3px 5px 6px rgba(0, 0, 0, .35); }
+#plateau[data-style="papier"] .bloc.refus > i { --anneau: 0 0 0 2px #ff4d4d; }
+#plateau[data-style="papier"] .bloc.mobile > i { --anneau: 0 0 0 1.5px rgba(255, 255, 255, .85); }
+#plateau[data-style="papier"] .bloc.a2.mobile > i { --anneau: 0 0 0 1px rgba(255, 255, 255, .5); }
+
+/* La ligne pleine se plie sur ses plis : chaque bloc se rabat en accordéon, de gauche à
+   droite, et un pli clair le traverse. */
+#plateau[data-style="papier"] .bloc.allume > i {
+  animation: papier-plie var(--duree, .3s) ease-in-out both;
+  animation-delay: calc(var(--col, 0) / var(--cols, 7) * var(--duree, .3s) * .35);
+}
+@keyframes papier-plie {
+  40% { transform: perspective(200px) rotateY(28deg) scaleX(.92); }
+  75% { transform: perspective(200px) rotateY(-18deg) scaleX(.86) skewY(-3deg); }
+  to { transform: scale(.82, .9) rotate(-3deg); }
+}
+
+/* Puis elle se froisse en boule serrée, qui s'envole vers le haut en tournant et s'estompe. */
+#plateau[data-style="papier"] .bloc.efface > i {
+  animation: papier-envol var(--duree, .26s) cubic-bezier(.4, 0, .7, 1) both;
+  animation-delay: calc(var(--col, 0) / var(--cols, 7) * var(--duree, .26s) * .25);
+}
+@keyframes papier-envol {
+  from { transform: scale(.82, .9) rotate(-3deg); border-radius: 1px; }
+  35% { transform: rotate(60deg) scale(calc(.5 / var(--l, 1)), .5) skew(10deg, -8deg); border-radius: 45%; opacity: 1; }
+  to { transform: translateY(-170%) rotate(260deg) scale(calc(.32 / var(--l, 1)), .32) skew(10deg, -8deg); border-radius: 50%; opacity: 0; }
+}

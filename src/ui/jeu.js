@@ -152,6 +152,7 @@ export function demarrerJeu() {
     el.style.height = `${zonePlace === 'grille' ? g.ch : g.ph}px`
     el.style.transform = `translate(${b.col * g.cw}px, ${y}px)`
     el.style.setProperty('--col', String(b.col)) // l'animation d'un style s'étale de colonne en colonne
+    el.style.setProperty('--l', String(b.largeur)) // la boule de Papier reste ronde quelle que soit la longueur
     el.classList.remove('glisse', 'tire', 'refus', 'allume')
     el.classList.toggle('a1', zonePlace === 'a1')
     el.classList.toggle('a2', zonePlace === 'a2')
