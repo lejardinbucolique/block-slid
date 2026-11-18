@@ -740,3 +740,85 @@ button { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   #plateau[data-style] .bloc::before { animation-duration: .01s; animation-delay: 0s; }
 }
+
+/* Bonbon (BS28) : un bonbon gélifié, bombé et brillant. La couleur, franche, est plus profonde
+   au cœur et s'éclaircit vers les bords comme une gelée traversée de lumière ; un gros reflet
+   blanc doux en haut à gauche, un petit en bas à droite, une ombre de sa couleur dessous. Tout
+   en dégradés : rien de calculé, rien de filtré. */
+#plateau[data-style="bonbon"] .bloc > i {
+  inset: 2px;
+  border-radius: calc(var(--ch, 40px) * .4);
+  background:
+    radial-gradient(ellipse 34% 22% at 30% 22%, rgba(255, 255, 255, .85), rgba(255, 255, 255, .35) 55%, transparent 75%),
+    radial-gradient(ellipse 12% 9% at 76% 80%, rgba(255, 255, 255, .55), transparent 80%),
+    radial-gradient(ellipse 75% 70% at 50% 58%, color-mix(in srgb, var(--c2) 88%, #000 12%), var(--c1) 62%, color-mix(in srgb, var(--c1) 70%, #fff 30%) 100%);
+  box-shadow:
+    inset 0 -3px 5px color-mix(in srgb, var(--c2) 65%, #000 35%),
+    inset 0 2px 3px rgba(255, 255, 255, .35),
+    0 3px 5px -1px color-mix(in srgb, var(--c2) 70%, transparent),
+    var(--anneau, 0 0 0 0 transparent);
+}
+#plateau[data-style="bonbon"] .bloc.a1 > i,
+#plateau[data-style="bonbon"] .bloc.a2 > i {
+  box-shadow: inset 0 -2px 3px color-mix(in srgb, var(--c2) 65%, #000 35%), 0 1px 2px color-mix(in srgb, var(--c2) 60%, transparent), var(--anneau, 0 0 0 0 transparent);
+}
+#plateau[data-style="bonbon"] .bloc.tire > i { --anneau: 0 5px 9px rgba(0, 0, 0, .4); }
+#plateau[data-style="bonbon"] .bloc.refus > i { --anneau: 0 0 0 2px #ff4d4d; }
+#plateau[data-style="bonbon"] .bloc.mobile > i { --anneau: 0 0 0 1.5px rgba(255, 255, 255, .85); }
+#plateau[data-style="bonbon"] .bloc.a2.mobile > i { --anneau: 0 0 0 1px rgba(255, 255, 255, .5); }
+
+/* La ligne pleine gonfle comme une bulle, de gauche à droite, et un anneau clair s'élargit. */
+#plateau[data-style="bonbon"] .bloc.allume > i {
+  animation: bonbon-gonfle var(--duree, .3s) ease-in-out both;
+  animation-delay: calc(var(--col, 0) / var(--cols, 7) * var(--duree, .3s) * .3);
+}
+@keyframes bonbon-gonfle {
+  45% { transform: scale(1.06, 1.14); }
+  70% { transform: scale(1.1, 1.08); }
+}
+#plateau[data-style="bonbon"] .bloc.allume > i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .8), 0 0 6px 2px color-mix(in srgb, var(--c1) 60%, #fff 40%);
+  animation: bonbon-anneau var(--duree, .3s) ease-out both;
+}
+@keyframes bonbon-anneau {
+  from { transform: scale(.85); opacity: 0; }
+  30% { opacity: 1; }
+  to { transform: scale(1.35, 1.6); opacity: 0; }
+}
+
+/* Puis elle éclate : la bulle s'ouvre et s'efface, et des gouttes de sa couleur giclent et
+   s'estompent (::before, des points en dégradés, emportés par un seul transform). */
+#plateau[data-style="bonbon"] .bloc.efface > i { animation: bonbon-eclate calc(var(--duree, .26s) * .55) ease-out both; }
+@keyframes bonbon-eclate {
+  30% { transform: scale(1.18, 1.25); opacity: 1; }
+  to { transform: scale(1.4, 1.5); opacity: 0; }
+}
+#plateau[data-style="bonbon"] .bloc.efface::before {
+  content: "";
+  position: absolute;
+  inset: -40% -10%;
+  pointer-events: none;
+  --g: color-mix(in srgb, var(--c1) 80%, #fff 20%);
+  background:
+    radial-gradient(circle at 12% 30%, var(--g) 3.5%, transparent 4.5%),
+    radial-gradient(circle at 30% 12%, var(--c1) 3%, transparent 4%),
+    radial-gradient(circle at 55% 8%, var(--g) 4%, transparent 5%),
+    radial-gradient(circle at 80% 18%, var(--c1) 3%, transparent 4%),
+    radial-gradient(circle at 92% 50%, var(--g) 3.5%, transparent 4.5%),
+    radial-gradient(circle at 75% 88%, var(--c1) 3%, transparent 4%),
+    radial-gradient(circle at 45% 92%, var(--g) 3.5%, transparent 4.5%),
+    radial-gradient(circle at 18% 80%, var(--c1) 3%, transparent 4%),
+    radial-gradient(circle at 6% 55%, var(--c1) 2.5%, transparent 3.5%);
+  animation: bonbon-gouttes var(--duree, .26s) cubic-bezier(.2, .7, .4, 1) both;
+}
+@keyframes bonbon-gouttes {
+  from { transform: scale(.3); opacity: 0; }
+  20% { opacity: 1; }
+  to { transform: scale(1.25) translateY(12%); opacity: 0; }
+}
+#plateau[data-style="bonbon"] .bloc.a1 > i,
+#plateau[data-style="bonbon"] .bloc.a2 > i { border-radius: 999px; }
