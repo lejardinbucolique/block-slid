@@ -33,33 +33,36 @@ test('paliers : dix, croissants, les quatre premiers donnés par le joueur', () 
   for (let i = 1; i < PALIERS.length; i++) assert.ok(PALIERS[i] > PALIERS[i - 1])
 })
 
-test('déblocage : la laine vient juste au premier palier, pas en dessous', () => {
+test('déblocage : la laine au premier palier, le béton au deuxième, pas en dessous', () => {
   assert.deepEqual(ids(stylesDebloques(0)), ['uni'])
   assert.deepEqual(ids(stylesDebloques(PALIERS[0] - 1)), ['uni'])
   assert.deepEqual(ids(stylesDebloques(PALIERS[0])), ['uni', 'laine'])
-  assert.deepEqual(ids(stylesDebloques(PALIERS[0] + 1)), ['uni', 'laine'])
+  assert.deepEqual(ids(stylesDebloques(PALIERS[1] - 1)), ['uni', 'laine'])
+  assert.deepEqual(ids(stylesDebloques(PALIERS[1])), ['uni', 'laine', 'beton'])
   assert.deepEqual(ids(stylesDebloques(10 ** 9)), ids(STYLES))
 })
 
 test('déblocage en cours de partie : nouveauxStyles au passage du palier seulement', () => {
   assert.deepEqual(ids(nouveauxStyles(0, PALIERS[0] - 1)), [])
   assert.deepEqual(ids(nouveauxStyles(PALIERS[0] - 1, PALIERS[0])), ['laine'])
-  assert.deepEqual(ids(nouveauxStyles(0, 10 ** 9)), ['laine'])
+  assert.deepEqual(ids(nouveauxStyles(PALIERS[1] - 1, PALIERS[1])), ['beton'])
+  assert.deepEqual(ids(nouveauxStyles(0, 10 ** 9)), ['laine', 'beton'])
   assert.deepEqual(ids(nouveauxStyles(PALIERS[0], PALIERS[0] + 500)), [])
 })
 
-test('prochain style : seulement s\'il existe, aucune promesse au-delà de la laine', () => {
+test('prochain style : seulement s\'il existe, aucune promesse au-delà du béton', () => {
   assert.equal(prochainStyle(0).id, 'laine')
-  assert.equal(prochainStyle(PALIERS[0] - 1).id, 'laine')
-  assert.equal(prochainStyle(PALIERS[0]), null)
-  assert.equal(prochainStyle(10 ** 9), null)
-  assert.match(resumeStyles(0), /0 sur 1.*Laine/)
-  assert.match(resumeStyles(PALIERS[0]), /1 sur 1/)
-  assert.doesNotMatch(resumeStyles(PALIERS[0]), /Prochain/)
+  assert.equal(prochainStyle(PALIERS[0]).id, 'beton')
+  assert.equal(prochainStyle(PALIERS[1] - 1).id, 'beton')
+  assert.equal(prochainStyle(PALIERS[1]), null)
+  assert.match(resumeStyles(0), /0 sur 2.*Laine/)
+  assert.match(resumeStyles(PALIERS[0]), /1 sur 2.*Béton, à 100000/)
+  assert.match(resumeStyles(PALIERS[1]), /2 sur 2/)
+  assert.doesNotMatch(resumeStyles(PALIERS[1]), /Prochain/)
 })
 
 test('rotation : jamais deux fois le même d\'affilée, uni compris', () => {
-  const debloques = stylesDebloques(PALIERS[0])
+  const debloques = stylesDebloques(PALIERS[1])
   let courant = STYLE_UNI
   const vus = new Set()
   for (let i = 0; i < 20; i++) {
@@ -68,7 +71,7 @@ test('rotation : jamais deux fois le même d\'affilée, uni compris', () => {
     vus.add(suivant)
     courant = suivant
   }
-  assert.deepEqual([...vus].sort(), ['laine', 'uni'])
+  assert.deepEqual([...vus].sort(), ['beton', 'laine', 'uni'])
 })
 
 test('rotation : avec trois styles, le choix suit le nombre tiré et exclut le courant', () => {
@@ -98,6 +101,9 @@ test('style lu : absent, abîmé ou inconnu = uni ; un style plus débloqué ret
   assert.equal(styleLu('laine'), 'laine')
   assert.equal(styleAutorise('laine', 0), 'uni')
   assert.equal(styleAutorise('laine', PALIERS[0]), 'laine')
+  assert.equal(styleLu('beton'), 'beton')
+  assert.equal(styleAutorise('beton', PALIERS[1] - 1), 'uni')
+  assert.equal(styleAutorise('beton', PALIERS[1]), 'beton')
 })
 
 test('stockage du style : lecture tolérante, sans stockage rien ne casse', () => {
