@@ -987,3 +987,93 @@ button { font: inherit; color: inherit; }
   15% { opacity: 1; }
   to { opacity: 0; transform: scale(1.3) translateY(10%); }
 }
+
+/* Verre (BS31) : une dalle de verre teinté dans la masse, comme un pavé de vitrail. La teinte
+   est franche et presque opaque (le fond de la grille ne la délave pas), plus profonde au bas
+   comme dans une épaisseur ; une arête biseautée claire fait le tour, et deux reflets nets
+   barrent la dalle en diagonale. */
+#plateau[data-style="verre"] .bloc > i {
+  inset: 1.5px;
+  border-radius: 3px;
+  background:
+    linear-gradient(125deg, transparent 16%, rgba(255, 255, 255, .62) 17%, rgba(255, 255, 255, .4) 24%, transparent 25%,
+      transparent 30%, rgba(255, 255, 255, .32) 31%, rgba(255, 255, 255, .22) 33.5%, transparent 34.5%),
+    radial-gradient(60% 45% at 72% 88%, color-mix(in srgb, var(--c1) 45%, #fff 55%), transparent 70%),
+    radial-gradient(85% 75% at 45% 45%, color-mix(in srgb, color-mix(in srgb, var(--c1) 88%, #fff 12%) 88%, transparent), color-mix(in srgb, var(--c1) 94%, transparent) 55%, color-mix(in srgb, var(--c2) 80%, #000 20%) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .85),
+    inset 1px 1px 0 3px color-mix(in srgb, var(--c1) 55%, #fff 45%),
+    inset -1px -1px 0 3px color-mix(in srgb, var(--c2) 75%, #000 25%),
+    inset 0 0 0 5px color-mix(in srgb, var(--c2) 85%, #000 15%),
+    0 1px 2px rgba(0, 0, 0, .5),
+    var(--anneau, 0 0 0 0 transparent);
+}
+#plateau[data-style="verre"] .bloc.a1 > i,
+#plateau[data-style="verre"] .bloc.a2 > i {
+  background:
+    linear-gradient(125deg, transparent 25%, rgba(255, 255, 255, .45) 26%, rgba(255, 255, 255, .3) 36%, transparent 37%),
+    linear-gradient(180deg, color-mix(in srgb, var(--c1) 92%, transparent), var(--c2));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .7), inset 0 -2px 0 color-mix(in srgb, var(--c2) 70%, #000 30%), var(--anneau, 0 0 0 0 transparent);
+}
+#plateau[data-style="verre"] .bloc.tire > i { --anneau: 0 4px 8px rgba(0, 0, 0, .5); }
+#plateau[data-style="verre"] .bloc.refus > i { --anneau: 0 0 0 2px #ff4d4d; }
+#plateau[data-style="verre"] .bloc.mobile > i { --anneau: 0 0 0 1.5px rgba(255, 255, 255, .85); }
+#plateau[data-style="verre"] .bloc.a2.mobile > i { --anneau: 0 0 0 1px rgba(255, 255, 255, .5); }
+
+/* La ligne pleine : un éclat de lumière la balaie de gauche à droite, une bande blanche en
+   biais qui traverse chaque dalle l'une après l'autre. */
+#plateau[data-style="verre"] .bloc.allume > i { overflow: hidden; }
+#plateau[data-style="verre"] .bloc.allume > i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 38%, rgba(255, 255, 255, .85) 48%, #fff 50%, rgba(255, 255, 255, .85) 52%, transparent 62%);
+  animation: verre-eclat var(--duree, .3s) ease-in-out both;
+  animation-delay: calc(var(--col, 0) / var(--cols, 7) * var(--duree, .3s) * .4);
+}
+@keyframes verre-eclat {
+  from { opacity: 0; transform: translateX(-110%); }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  to { opacity: 0; transform: translateX(110%); }
+}
+
+/* Puis la dalle se brise : trois éclats découpés (clip-path) dans le même verre, la dalle
+   elle-même et ses deux pseudo-éléments, tombent chacun de leur côté en tournant et s'estompent. */
+#plateau[data-style="verre"] .bloc.efface::before,
+#plateau[data-style="verre"] .bloc.efface::after {
+  content: "";
+  position: absolute;
+  inset: 1.5px;
+  pointer-events: none;
+  background:
+    linear-gradient(125deg, transparent 30%, rgba(255, 255, 255, .5) 31%, rgba(255, 255, 255, .3) 40%, transparent 41%),
+    radial-gradient(60% 45% at 72% 88%, color-mix(in srgb, var(--c1) 45%, #fff 55%), transparent 70%),
+    radial-gradient(85% 75% at 45% 45%, var(--c1), color-mix(in srgb, var(--c2) 80%, #000 20%));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .85), inset 0 0 0 4px color-mix(in srgb, var(--c2) 85%, #000 15%);
+}
+#plateau[data-style="verre"] .bloc.efface > i {
+  clip-path: polygon(0 0, 55% 0, 38% 45%, 0 70%);
+  animation: verre-eclat-a var(--duree, .26s) cubic-bezier(.4, 0, .9, .6) both;
+}
+#plateau[data-style="verre"] .bloc.efface::before {
+  clip-path: polygon(55% 0, 100% 0, 100% 60%, 62% 52%, 38% 45%);
+  animation: verre-eclat-b var(--duree, .26s) cubic-bezier(.4, 0, .9, .6) both;
+}
+#plateau[data-style="verre"] .bloc.efface::after {
+  clip-path: polygon(0 70%, 38% 45%, 62% 52%, 100% 60%, 100% 100%, 0 100%);
+  animation: verre-eclat-c var(--duree, .26s) cubic-bezier(.4, 0, .9, .6) both;
+}
+@keyframes verre-eclat-a {
+  10% { transform: none; opacity: 1; }
+  to { transform: translate(-22%, 90%) rotate(-24deg); opacity: 0; }
+}
+@keyframes verre-eclat-b {
+  10% { transform: none; opacity: 1; }
+  to { transform: translate(24%, 70%) rotate(30deg); opacity: 0; }
+}
+@keyframes verre-eclat-c {
+  10% { transform: none; opacity: 1; }
+  to { transform: translate(4%, 130%) rotate(-10deg); opacity: 0; }
+}

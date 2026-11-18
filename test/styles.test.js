@@ -17,6 +17,18 @@ import { styleGarde, retenirStyle } from '../src/ui/stockage.js'
 
 const ids = (liste) => liste.map((s) => s.id)
 
+// Tirage à graine fixe (mulberry32) : la rotation se teste sans hasard.
+function tirageGraine(graine) {
+  let a = graine >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
 function faussePile(initial = {}) {
   const m = new Map(Object.entries(initial))
   globalThis.localStorage = {
@@ -47,6 +59,8 @@ test('déblocage : la laine au premier palier, le béton au deuxième, pas en de
   assert.deepEqual(ids(stylesDebloques(PALIERS[4])), ['uni', 'laine', 'beton', 'bois', 'bonbon', 'papier'])
   assert.deepEqual(ids(stylesDebloques(PALIERS[5] - 1)), ['uni', 'laine', 'beton', 'bois', 'bonbon', 'papier'])
   assert.deepEqual(ids(stylesDebloques(PALIERS[5])), ['uni', 'laine', 'beton', 'bois', 'bonbon', 'papier', 'metal'])
+  assert.deepEqual(ids(stylesDebloques(PALIERS[6] - 1)), ['uni', 'laine', 'beton', 'bois', 'bonbon', 'papier', 'metal'])
+  assert.deepEqual(ids(stylesDebloques(PALIERS[6])), ['uni', 'laine', 'beton', 'bois', 'bonbon', 'papier', 'metal', 'verre'])
   assert.deepEqual(ids(stylesDebloques(10 ** 9)), ids(STYLES))
 })
 
@@ -58,39 +72,43 @@ test('déblocage en cours de partie : nouveauxStyles au passage du palier seulem
   assert.deepEqual(ids(nouveauxStyles(PALIERS[3] - 1, PALIERS[3])), ['bonbon'])
   assert.deepEqual(ids(nouveauxStyles(PALIERS[4] - 1, PALIERS[4])), ['papier'])
   assert.deepEqual(ids(nouveauxStyles(PALIERS[5] - 1, PALIERS[5])), ['metal'])
-  assert.deepEqual(ids(nouveauxStyles(0, 10 ** 9)), ['laine', 'beton', 'bois', 'bonbon', 'papier', 'metal'])
+  assert.deepEqual(ids(nouveauxStyles(PALIERS[6] - 1, PALIERS[6])), ['verre'])
+  assert.deepEqual(ids(nouveauxStyles(0, 10 ** 9)), ids(STYLES).filter((id) => id !== STYLE_UNI))
   assert.deepEqual(ids(nouveauxStyles(PALIERS[0], PALIERS[0] + 500)), [])
 })
 
-test('prochain style : seulement s\'il existe, aucune promesse au-delà du métal', () => {
+test('prochain style : seulement s\'il existe, aucune promesse au-delà du verre', () => {
   assert.equal(prochainStyle(0).id, 'laine')
   assert.equal(prochainStyle(PALIERS[0]).id, 'beton')
   assert.equal(prochainStyle(PALIERS[1]).id, 'bois')
   assert.equal(prochainStyle(PALIERS[2]).id, 'bonbon')
   assert.equal(prochainStyle(PALIERS[3]).id, 'papier')
   assert.equal(prochainStyle(PALIERS[4]).id, 'metal')
-  assert.equal(prochainStyle(PALIERS[5]), null)
-  assert.match(resumeStyles(0), /0 sur 6.*Laine/)
-  assert.match(resumeStyles(PALIERS[0]), /1 sur 6.*Béton, à 100000/)
-  assert.match(resumeStyles(PALIERS[1]), /2 sur 6.*Bois, à 250000/)
-  assert.match(resumeStyles(PALIERS[2]), /3 sur 6.*Bonbon, à 500000/)
-  assert.match(resumeStyles(PALIERS[3]), /4 sur 6.*Papier, à 1000000/)
-  assert.match(resumeStyles(PALIERS[4]), /5 sur 6.*Métal, à 2000000/)
-  assert.match(resumeStyles(PALIERS[5]), /6 sur 6/)
-  assert.doesNotMatch(resumeStyles(PALIERS[5]), /Prochain/)
+  assert.equal(prochainStyle(PALIERS[5]).id, 'verre')
+  assert.equal(prochainStyle(PALIERS[6]), null)
+  assert.match(resumeStyles(0), /0 sur 7.*Laine/)
+  assert.match(resumeStyles(PALIERS[0]), /1 sur 7.*Béton, à 100000/)
+  assert.match(resumeStyles(PALIERS[1]), /2 sur 7.*Bois, à 250000/)
+  assert.match(resumeStyles(PALIERS[2]), /3 sur 7.*Bonbon, à 500000/)
+  assert.match(resumeStyles(PALIERS[3]), /4 sur 7.*Papier, à 1000000/)
+  assert.match(resumeStyles(PALIERS[4]), /5 sur 7.*Métal, à 2000000/)
+  assert.match(resumeStyles(PALIERS[5]), /6 sur 7.*Verre, à 3500000/)
+  assert.match(resumeStyles(PALIERS[6]), /7 sur 7/)
+  assert.doesNotMatch(resumeStyles(PALIERS[6]), /Prochain/)
 })
 
 test('rotation : jamais deux fois le même d\'affilée, uni compris', () => {
-  const debloques = stylesDebloques(PALIERS[5])
+  const debloques = stylesDebloques(10 ** 9)
+  const tirer = tirageGraine(35)
   let courant = STYLE_UNI
   const vus = new Set()
-  for (let i = 0; i < 20; i++) {
-    const suivant = choisirStyle(debloques, courant, Math.random)
+  for (let i = 0; i < 500; i++) {
+    const suivant = choisirStyle(debloques, courant, tirer)
     assert.notEqual(suivant, courant)
     vus.add(suivant)
     courant = suivant
   }
-  assert.deepEqual([...vus].sort(), ['beton', 'bois', 'bonbon', 'laine', 'metal', 'papier', 'uni'])
+  assert.deepEqual([...vus].sort(), ids(STYLES).sort())
 })
 
 test('rotation : avec trois styles, le choix suit le nombre tiré et exclut le courant', () => {
