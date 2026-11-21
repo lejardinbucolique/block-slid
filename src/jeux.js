@@ -11,7 +11,7 @@ export const JEU_PAR_DEFAUT = JEU_BLOCK_SLID
 
 export const JEUX = Object.freeze([
   Object.freeze({ id: JEU_BLOCK_SLID, nom: 'Block slid', disponible: true }),
-  Object.freeze({ id: JEU_BLOCK_POSE, nom: 'Block pose', disponible: false }),
+  Object.freeze({ id: JEU_BLOCK_POSE, nom: 'Block pose', disponible: true }),
 ])
 
 // Les jeux qu'on peut choisir, dans l'ordre du registre.

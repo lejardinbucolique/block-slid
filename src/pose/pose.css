@@ -1,0 +1,507 @@
+/* Feuille de style de block-pose (BS45). Chargée seulement quand ce jeu est choisi : elle ne
+   touche jamais block-slid. Tous les sélecteurs sont sous #pose, ou #app.jeu-pose pour masquer
+   la page de block-slid.
+
+   Le décor tient dans les variables ci-dessous, posées sur #pose, qui porte aussi `data-style`
+   (la texture des blocs en cours). Le décor sobre d'ici est celui du style Uni ; un autre style
+   n'a qu'à les surcharger : #pose[data-style="laine"] { --pose-fond: ...; } (BS47). Les textures
+   des blocs, elles, se posent sur .pose-bloc (BS46). */
+
+#app.jeu-pose > :not(#pose):not(#message) { display: none !important; }
+
+#pose {
+  /* Décor (style Uni) */
+  --pose-fond: #efe7dc;          /* le fond de l'écran */
+  --pose-texte: #2d2a33;         /* score, textes */
+  --pose-texte-doux: #6f6a73;    /* textes secondaires */
+  --pose-accent: #c47a00;        /* record, défi, série */
+  --pose-cadre: #8f8576;         /* le cadre de la grille */
+  --pose-grille-fond: #cfc6b8;   /* le fond de la grille, entre les cases */
+  --pose-case-vide: #ddd5c8;     /* une case libre */
+  --pose-case-vide-haut: #e6dfd3;/* une case libre qui s'élève (aperçu du coup) */
+  --pose-bouton: #fbf7f0;        /* les boutons de bonus */
+  --pose-bouton-bord: #b9ae9d;
+  --pose-ombre-pose: rgba(0, 0, 0, .28);
+
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) max(6px, env(safe-area-inset-bottom)) env(safe-area-inset-left);
+  overflow: hidden;
+  color: var(--pose-texte);
+  background: var(--pose-fond);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#pose[hidden],
+#pose [hidden] { display: none; }
+
+/* --- En-tête : record, score, réglages, défi ---------------------------------------- */
+
+#pose-haut {
+  flex: none;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-areas: "meilleur score reglages" "defi defi defi";
+  align-items: center;
+  padding: 6px 14px 0;
+}
+
+#pose-meilleur {
+  grid-area: meilleur;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--pose-accent);
+  font-variant-numeric: tabular-nums;
+}
+#pose-meilleur svg { width: 26px; height: 26px; fill: currentColor; }
+
+#pose-reglages-ouvrir {
+  grid-area: reglages;
+  justify-self: end;
+  width: 46px;
+  height: 46px;
+  padding: 8px;
+  background: none;
+  border: 0;
+  border-radius: 50%;
+}
+#pose-reglages-ouvrir svg { width: 100%; height: 100%; fill: var(--pose-texte); opacity: .75; }
+#pose-reglages-ouvrir:active { background: rgba(0, 0, 0, .1); }
+
+#pose-score-bloc { grid-area: score; position: relative; text-align: center; }
+#pose-score {
+  font-size: clamp(2.3rem, 11vw, 3.4rem);
+  line-height: 1.05;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+#pose-score.saut,
+#pose-serie.saut { animation: pose-saut .25s ease-out; }
+@keyframes pose-saut { 40% { transform: scale(1.12); } }
+
+/* La série : le multiplicateur du prochain coup qui efface, à droite du score. */
+#pose-serie {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  margin: -.9rem 0 0 .35rem;
+  padding: .1rem .5rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fff;
+  background: var(--pose-accent);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* Le défi : sous le score, avec ce qu'il reste de coups. */
+#pose-defi {
+  grid-area: defi;
+  justify-self: center;
+  width: min(100%, 17rem);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 2px;
+  font-size: .85rem;
+  text-align: center;
+}
+#pose-defi-texte { font-weight: 700; font-variant-numeric: tabular-nums; }
+#pose-defi-barre {
+  position: relative;
+  height: 1.15rem;
+  overflow: hidden;
+  background: rgba(0, 0, 0, .12);
+  border-radius: 999px;
+}
+#pose-defi-jauge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: var(--pose-accent);
+  opacity: .55;
+  transition: width .3s ease-out;
+}
+#pose-defi-reste {
+  position: relative;
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 1.15rem;
+  color: var(--pose-texte);
+}
+#pose-defi.reussi { animation: pose-defi-reussi .8s ease-out; }
+#pose-defi.rate { animation: pose-defi-rate .6s ease-out; }
+@keyframes pose-defi-reussi {
+  30% { transform: scale(1.1); filter: drop-shadow(0 0 6px #3aa655); }
+  100% { transform: none; }
+}
+@keyframes pose-defi-rate {
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+/* --- Grille ---------------------------------------------------------------------------- */
+
+#pose-zone { flex: none; display: flex; justify-content: center; }
+
+#pose-plateau {
+  position: relative;
+  padding: 5px; /* CADRE_PX de ecran.js */
+  background: var(--pose-cadre);
+  border-radius: 10px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .18);
+}
+
+#pose-grille {
+  display: grid;
+  grid-template: repeat(10, var(--cell)) / repeat(10, var(--cell));
+  background: var(--pose-grille-fond);
+  border-radius: 5px;
+  touch-action: none;
+}
+#pose-grille.retour { animation: pose-retour .4s ease-out; }
+@keyframes pose-retour { 0% { filter: brightness(1.35) saturate(.6); } 100% { filter: none; } }
+
+/* Les points, étoiles et soupirs montent par-dessus la grille, sans la gêner. */
+#pose-effets { position: absolute; left: 5px; top: 5px; width: 0; height: 0; z-index: 4; pointer-events: none; }
+
+#pose .pose-case {
+  position: relative;
+  margin: 1px;
+  background: var(--pose-case-vide);
+  border-radius: 4px;
+  transition: transform .14s ease-out, box-shadow .14s ease-out, background-color .14s;
+}
+
+/* Un bloc : une case de pièce, sur la grille comme dans les rangées de pièces. Le style Uni le
+   dessine plat, avec un léger relief ; BS46 le rhabille par style. */
+#pose .pose-bloc {
+  display: block;
+  border-radius: 4px;
+  background: var(--couleur);
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, .35),
+    inset -2px -3px 0 rgba(0, 0, 0, .25);
+}
+#pose .pose-case > .pose-bloc { position: absolute; inset: 0; visibility: hidden; }
+#pose .pose-case.occupee > .pose-bloc { visibility: visible; }
+
+/* Case surprise : son numéro baisse à chaque pièce posée ; sur une pièce à venir, un « ? ». */
+#pose .pose-case.surprise { outline: 2px dashed rgba(255, 255, 255, .9); outline-offset: -3px; }
+#pose .pose-case.surprise::after {
+  content: attr(data-reste);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--cell) * .55);
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
+}
+#pose .pose-piece > .pose-bloc.surprise {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--cm, 16px) * .8);
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .7);
+  outline: 2px dashed rgba(255, 255, 255, .9);
+  outline-offset: -2px;
+}
+#pose .pose-petit .pose-piece > .pose-bloc.surprise { font-size: calc(var(--ca, 10px) * .8); outline-width: 1px; }
+#pose .pose-fantome > .pose-bloc.surprise { font-size: calc(var(--cell) * .55); }
+
+/* L'aperçu du coup : l'ombre pâle où la pièce tombera, l'emplacement qui s'allume... */
+#pose .pose-case.ombre > .pose-bloc { visibility: visible; opacity: .5; }
+#pose .pose-case.vise { box-shadow: 0 0 0 2px #fff, 0 0 calc(var(--cell) * .35) rgba(255, 255, 255, .9); z-index: 1; }
+#pose .pose-case.vise > .pose-bloc { opacity: .75; }
+
+/* ... et chaque ligne ou colonne qui serait complétée s'élève un peu au-dessus de la surface. */
+#pose .pose-case.eleve {
+  z-index: 2;
+  background: var(--pose-case-vide-haut);
+  transform: translateY(calc(var(--cell) * -.09)) scale(1.04);
+  box-shadow: 0 calc(var(--cell) * .12) calc(var(--cell) * .12) var(--pose-ombre-pose);
+}
+#pose .pose-case.eleve.vise {
+  box-shadow: 0 0 0 2px #fff, 0 calc(var(--cell) * .12) calc(var(--cell) * .14) var(--pose-ombre-pose);
+}
+
+/* La pose, l'effacement. */
+#pose .pose-case.nouveau > .pose-bloc { animation: pose-nouveau .28s ease-out; }
+@keyframes pose-nouveau { 0% { transform: scale(1.25); filter: brightness(1.5); } 100% { transform: none; filter: none; } }
+#pose .pose-case.efface > .pose-bloc { animation: pose-efface .3s ease-in forwards; }
+@keyframes pose-efface {
+  0% { transform: scale(1); filter: brightness(1.8); }
+  35% { transform: scale(1.12); filter: brightness(2.2); opacity: 1; }
+  100% { transform: scale(.2); opacity: 0; }
+}
+
+/* Points qui montent : « +n », plus gros avec le nombre de lignes et la série. */
+#pose .pose-points {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: max-content;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+  -webkit-text-stroke: 1px rgba(0, 0, 0, .55);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .55), 0 0 8px rgba(0, 0, 0, .45);
+  animation: pose-points 1s ease-out forwards;
+  translate: -50% -50%;
+}
+#pose .pose-points small { font-size: .38em; font-weight: 800; letter-spacing: .02em; }
+@keyframes pose-points {
+  0% { transform: translateY(0) scale(.6); opacity: 0; }
+  18% { transform: translateY(calc(var(--cell) * -.3)) scale(1.1); opacity: 1; }
+  75% { opacity: 1; }
+  100% { transform: translateY(calc(var(--cell) * -1.6)) scale(1); opacity: 0; }
+}
+
+#pose .pose-effet {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--cell) * 1.4);
+  height: calc(var(--cell) * 1.4);
+  translate: -50% -50%;
+  font-weight: 900;
+  font-size: calc(var(--cell) * .9);
+  line-height: 1;
+}
+#pose .pose-etoile { color: #ffd23a; text-shadow: 0 0 10px #fff, 0 2px 0 rgba(0, 0, 0, .5); animation: pose-etoile 1s ease-out forwards; }
+@keyframes pose-etoile {
+  0% { transform: scale(.4) rotate(0); opacity: 0; }
+  25% { transform: scale(1.7) rotate(90deg); opacity: 1; }
+  100% { transform: translateY(calc(var(--cell) * -1.2)) scale(1) rotate(200deg); opacity: 0; }
+}
+#pose .pose-soupir { color: #6f6a73; font-size: calc(var(--cell) * .7); text-shadow: 0 1px 0 #fff; animation: pose-soupir .9s ease-out forwards; }
+@keyframes pose-soupir { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: translateY(calc(var(--cell) * .5)) scale(.5); } }
+#pose .pose-apparait { color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .8); animation: pose-apparait .7s ease-out forwards; }
+@keyframes pose-apparait { 0% { opacity: 0; transform: scale(2.2); } 40% { opacity: 1; } 100% { opacity: 0; transform: scale(1); } }
+
+/* --- Bonus : quatre icônes dessinées, avec leur réserve ------------------------------------ */
+
+#pose-bonus {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  padding: 2px 0;
+}
+
+#pose .pose-bonus-bouton {
+  position: relative;
+  width: 52px;
+  height: 46px;
+  padding: 0;
+  color: var(--pose-texte);
+  background: var(--pose-bouton);
+  border: 2px solid var(--pose-bouton-bord);
+  border-radius: 14px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .18);
+}
+#pose .pose-bonus-bouton svg {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+#pose .pose-bonus-bouton:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0, 0, 0, .18); }
+#pose .pose-bonus-bouton:disabled { opacity: .35; box-shadow: none; }
+#pose .pose-bonus-bouton.actif {
+  color: #fff;
+  background: var(--pose-accent);
+  border-color: var(--pose-accent);
+  animation: pose-actif 1s ease-in-out infinite;
+}
+@keyframes pose-actif { 50% { box-shadow: 0 0 0 4px rgba(196, 122, 0, .35); } }
+
+#pose .pose-bonus-nombre {
+  position: absolute;
+  right: -7px;
+  top: -8px;
+  min-width: 1.4rem;
+  padding: 0 .25rem;
+  font-size: .8rem;
+  font-weight: 800;
+  line-height: 1.4rem;
+  text-align: center;
+  color: #fff;
+  background: #4a4552;
+  border: 2px solid var(--pose-fond);
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+#pose .pose-bonus-bouton.gagne { animation: pose-gagne .8s ease-out; }
+@keyframes pose-gagne {
+  20% { transform: scale(1.3); box-shadow: 0 0 0 5px rgba(58, 166, 85, .6); }
+  100% { transform: none; }
+}
+#pose .pose-plus {
+  position: absolute;
+  left: 50%;
+  top: -4px;
+  translate: -50% 0;
+  font-size: 1rem;
+  font-weight: 900;
+  color: #1f7a38;
+  text-shadow: 0 0 3px #fff, 0 0 3px #fff;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: pose-plus .8s ease-out forwards;
+}
+@keyframes pose-plus { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-1.8rem); opacity: 0; } }
+
+#pose-aide {
+  flex: none;
+  min-height: 1.3rem;
+  padding: 0 14px;
+  font-size: .9rem;
+  font-weight: 700;
+  line-height: 1.3rem;
+  text-align: center;
+  color: var(--pose-accent);
+}
+#pose-aide.alerte { color: #b3261e; }
+
+/* --- Pièces à poser, aperçu des suivantes -------------------------------------------------- */
+
+#pose-main,
+#pose-apercu {
+  flex: none;
+  display: flex;
+  width: min(100%, calc(var(--largeur-grille) + 12px));
+  justify-content: space-around;
+  touch-action: none; /* le glisser au doigt ne fait pas défiler la page */
+}
+#pose-main { height: var(--haut-main); }
+#pose-apercu { height: var(--haut-apercu); opacity: .85; }
+#pose-main * { touch-action: none; }
+
+#pose .pose-emplacement {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+}
+#pose .pose-emplacement.pose-petit { cursor: default; }
+#pose .pose-emplacement.vide { cursor: default; }
+
+#pose .pose-piece { display: grid; }
+#pose .pose-piece > .pose-bloc { border-radius: 3px; box-shadow: inset 1px 1px 0 rgba(255, 255, 255, .35), inset -1px -2px 0 rgba(0, 0, 0, .25); }
+#pose .pose-petit .pose-piece > .pose-bloc { border-radius: 2px; }
+
+/* Une pièce qui ne tient nulle part : grisée ; à toucher quand un bonus la vise. */
+#pose .pose-emplacement.bloquee .pose-piece { opacity: .4; filter: grayscale(.7); }
+#pose .pose-emplacement.visable .pose-piece { animation: pose-visable .9s ease-in-out infinite; }
+@keyframes pose-visable { 50% { transform: scale(1.14); filter: brightness(1.15); } }
+#pose .pose-emplacement.leve .pose-piece { opacity: .18; }
+#pose .pose-emplacement.refus .pose-piece { animation: pose-refus .3s ease-out; }
+@keyframes pose-refus { 25%, 75% { transform: translateX(-5px); } 50% { transform: translateX(5px); } }
+#pose .pose-emplacement.entre .pose-piece { animation: pose-entre .3s ease-out; }
+@keyframes pose-entre { 0% { transform: scale(.4); opacity: 0; } 70% { transform: scale(1.1); } 100% { transform: none; opacity: 1; } }
+#pose .pose-emplacement.tourne .pose-piece { animation: pose-tourne .32s ease-out; }
+@keyframes pose-tourne { 0% { transform: rotate(-90deg) scale(.7); opacity: .3; } 100% { transform: none; opacity: 1; } }
+
+/* La pièce qu'on tire : à la taille de la grille, au-dessus du doigt. */
+#pose .pose-fantome {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 6;
+  transform-origin: 0 0;
+  pointer-events: none;
+  will-change: translate, scale;
+  filter: drop-shadow(0 6px 5px rgba(0, 0, 0, .35));
+}
+#pose .pose-fantome > .pose-bloc { box-shadow: inset 2px 2px 0 rgba(255, 255, 255, .4), inset -2px -3px 0 rgba(0, 0, 0, .25); border-radius: 4px; }
+#pose .pose-fantome.vole { transition: translate .15s ease-out, scale .15s ease-out; }
+#pose .pose-fantome.retour { transition: translate .19s ease-in, scale .19s ease-in; }
+#pose .pose-fantome.invalide { filter: drop-shadow(0 6px 5px rgba(0, 0, 0, .35)) saturate(.4) brightness(.9); opacity: .8; }
+#pose .pose-fantome.invalide > .pose-bloc { outline: 2px solid #d62839; outline-offset: -2px; }
+
+/* --- Annonces ---------------------------------------------------------------------------- */
+
+#pose-infos {
+  position: fixed;
+  left: 50%;
+  top: calc(env(safe-area-inset-top) + 7.2rem);
+  z-index: 5;
+  width: min(92%, 22rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  translate: -50% 0;
+  pointer-events: none;
+}
+#pose .pose-info {
+  padding: .35rem .9rem;
+  font-size: .9rem;
+  font-weight: 700;
+  text-align: center;
+  color: #fff;
+  background: rgba(45, 42, 51, .88);
+  border-radius: 999px;
+  animation: pose-info 2.6s ease-in-out forwards;
+}
+@keyframes pose-info {
+  0% { opacity: 0; transform: translateY(-6px); }
+  8%, 82% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+
+/* --- Fenêtres : même esprit que celles de block-slid ----------------------------------------- */
+
+#pose .fenetre { max-height: 100%; overflow-y: auto; color: var(--texte); touch-action: pan-y; }
+
+#pose-choix-liste { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+#pose .pose-choix-bouton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .15rem;
+  min-height: 5.2rem;
+  padding: .6rem .4rem;
+  color: inherit;
+  background: var(--case);
+  border: 0;
+  border-radius: 14px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .35);
+}
+#pose .pose-choix-bouton:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0, 0, 0, .35); }
+#pose .pose-choix-bouton svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+#pose .pose-choix-bouton small { font-size: .78rem; opacity: .8; }
+
+#pose-fin-record { color: var(--accent); font-weight: 700; }
+#pose-fin-score { font-size: 1.3rem; font-weight: 700; }
+
+/* --- Mouvement réduit : l'élévation reste, sans animation ---------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  #pose *, #pose *::before, #pose *::after { transition-duration: .01s !important; animation-duration: .01s !important; animation-iteration-count: 1 !important; }
+}

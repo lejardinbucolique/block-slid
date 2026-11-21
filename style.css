@@ -1424,3 +1424,8 @@ button { font: inherit; color: inherit; }
   25% { opacity: 1; transform: scale(.8); }
   100% { opacity: 0; transform: scale(1.5); }
 }
+
+/* block-pose (BS45) : pendant que son écran se charge, la page de block-slid ne se montre pas et le
+   fond est déjà celui du jeu (le décor Uni de src/pose/pose.css). Sans effet pour block-slid. */
+html[data-jeu="block-pose"] body { background: #efe7dc; }
+html[data-jeu="block-pose"] #app > :not(#message):not(#pose) { visibility: hidden; }

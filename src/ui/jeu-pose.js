@@ -1,9 +1,4 @@
-// Point d'entrée de block-pose (BS39) : écran provisoire, remplacé par le vrai jeu dans
-// les tâches suivantes. Tant que le jeu n'est pas disponible (src/jeux.js), personne ne
-// peut le choisir : ce module ne s'affiche donc jamais à un joueur.
+// Point d'entrée de block-pose (BS39) : l'écran du jeu est dans src/pose/ecran.js (BS45), avec
+// sa feuille de style à part. Ce module ne sert qu'à garder le point d'entrée de app.js.
 
-export function demarrerJeu() {
-  const message = document.getElementById('message')
-  message.textContent = 'Block pose : bientôt.'
-  message.hidden = false
-}
+export { demarrerJeu } from '../pose/ecran.js'

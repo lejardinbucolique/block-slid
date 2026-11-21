@@ -56,22 +56,23 @@ function faussePile(initial = {}) {
 
 const ids = (liste) => liste.map((s) => s.id)
 
-test('registre des jeux : block-slid disponible, block-pose pas encore', () => {
+test('registre des jeux : block-slid et block-pose sont disponibles (BS45), block-slid par défaut', () => {
   assert.deepEqual(ids(JEUX), [JEU_BLOCK_SLID, JEU_BLOCK_POSE])
   assert.equal(JEU_PAR_DEFAUT, JEU_BLOCK_SLID)
   assert.deepEqual(JEUX.map((j) => j.nom), ['Block slid', 'Block pose'])
-  assert.deepEqual(ids(jeuxDisponibles()), [JEU_BLOCK_SLID])
+  assert.deepEqual(ids(jeuxDisponibles()), [JEU_BLOCK_SLID, JEU_BLOCK_POSE])
 })
 
-test('registre des jeux : avec un seul jeu disponible, la ligne « Jeu » reste cachée', () => {
-  assert.equal(choixDeJeuVisible(), false)
+test('registre des jeux : avec deux jeux disponibles, la ligne « Jeu » apparaît dans les réglages', () => {
+  assert.equal(choixDeJeuVisible(), true)
 })
 
-test('jeu lu : absent, abîmé, inconnu ou pas disponible = block-slid', () => {
-  for (const valeur of [null, undefined, '', 'nimportequoi', '{"jeu":1}', 42, {}, JEU_BLOCK_POSE, 'BLOCK-SLID']) {
+test('jeu lu : absent, abîmé ou inconnu = block-slid ; un jeu disponible se relit', () => {
+  for (const valeur of [null, undefined, '', 'nimportequoi', '{"jeu":1}', 42, {}, 'BLOCK-SLID', 'BLOCK-POSE', 'block-pose ']) {
     assert.equal(jeuLu(valeur), JEU_BLOCK_SLID, String(valeur))
   }
   assert.equal(jeuLu(JEU_BLOCK_SLID), JEU_BLOCK_SLID)
+  assert.equal(jeuLu(JEU_BLOCK_POSE), JEU_BLOCK_POSE)
 })
 
 test('jeu choisi : le premier lancement ouvre block-slid, le choix retenu se relit', () => {
@@ -80,10 +81,13 @@ test('jeu choisi : le premier lancement ouvre block-slid, le choix retenu se rel
   retenirJeu(JEU_BLOCK_SLID)
   assert.equal(pile.get('appli.jeu'), JEU_BLOCK_SLID)
   assert.equal(jeuChoisi(), JEU_BLOCK_SLID)
+  retenirJeu(JEU_BLOCK_POSE)
+  assert.equal(pile.get('appli.jeu'), JEU_BLOCK_POSE)
+  assert.equal(jeuChoisi(), JEU_BLOCK_POSE)
 })
 
-test('jeu choisi : une valeur gardée pour un jeu pas disponible retombe sur block-slid', () => {
-  faussePile({ 'appli.jeu': JEU_BLOCK_POSE })
+test('jeu choisi : une valeur gardée qui ne désigne aucun jeu retombe sur block-slid', () => {
+  faussePile({ 'appli.jeu': 'block-inconnu' })
   assert.equal(jeuChoisi(), JEU_BLOCK_SLID)
   faussePile({ 'appli.jeu': '\u0000{abîmé' })
   assert.equal(jeuChoisi(), JEU_BLOCK_SLID)

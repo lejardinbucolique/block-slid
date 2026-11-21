@@ -139,6 +139,9 @@ export function reservePose() {
   } catch { return {} }
 }
 export const garderReservePose = (reserve) => ecrire(CLES_BLOCK_POSE.reserve, JSON.stringify(reserve))
+// La réserve a-t-elle déjà été créée ? Le texte gardé peut dire « tout à zéro » (réserve épuisée), que
+// reservePose() ne distingue pas de « jamais créée » : seul ceci décide des 3 bonus offerts, une seule fois.
+export const reservePoseExiste = () => lire(CLES_BLOCK_POSE.reserve) !== null
 
 // La partie en cours, en données simples ; null s'il n'y en a pas ou si le texte est illisible.
 export function partiePoseGardee() {

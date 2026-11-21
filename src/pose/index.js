@@ -3,6 +3,14 @@ export { FORMES, CATALOGUE, piece, pieceSuivante, LIGNES_MAX_PAR_COUP, COLONNES_
 export { NIVEAU_MIN, NIVEAU_MAX, NIVEAU_PAR_DEFAUT, POIDS_NIVEAUX, niveauValide, poidsDesPieces } from './niveaux.js'
 export { tirerPieces } from './tirage.js'
 export {
+  TOLERANCE_HORS_GRILLE,
+  caseVisee,
+  apercuCoup,
+  casesElevees,
+  centreEffacement,
+  tailleCellule,
+} from './geste.js'
+export {
   PALETTE,
   LISTE as LISTE_COULEURS,
   FOND_ROSE_REFERENCE,

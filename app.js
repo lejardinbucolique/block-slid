@@ -1,4 +1,4 @@
-import { JEUX, jeuxDisponibles, choixDeJeuVisible } from './src/jeux.js'
+import { JEUX, JEU_PAR_DEFAUT, jeuxDisponibles, choixDeJeuVisible } from './src/jeux.js'
 import { jeuChoisi, retenirJeu } from './src/ui/stockage.js'
 
 // Un point d'entrée par jeu, chargé seulement quand le jeu est choisi (BS39).
@@ -11,6 +11,7 @@ const POINTS_ENTREE = {
 // Changer de jeu retient le choix puis recharge la page : la partie de chaque jeu est
 // déjà gardée à part, et rien du jeu en cours n'est à démonter.
 const jeu = jeuChoisi()
+document.documentElement.dataset.jeu = jeu // pour que la page de l'autre jeu ne se montre pas (style.css)
 if (choixDeJeuVisible()) {
   const choix = document.getElementById("jeu");
   for (const j of jeuxDisponibles()) {
@@ -73,7 +74,14 @@ modeInstalle.addEventListener?.("change", afficher);
 afficher();
 POINTS_ENTREE[jeu]()
   .then((module) => module.demarrerJeu())
-  .catch((err) => console.error("Démarrage du jeu :", err));
+  .catch((err) => {
+    console.error("Démarrage du jeu :", err);
+    // Un jeu qui ne démarre pas ne laisse pas l'appli vide : on retombe sur block-slid.
+    if (jeu !== JEU_PAR_DEFAUT) {
+      retenirJeu(JEU_PAR_DEFAUT);
+      location.reload();
+    }
+  });
 
 // Mise à jour : sw.js prend la main dès qu'une nouvelle version est installée
 // (skipWaiting, clients.claim) ; la page se recharge alors une seule fois pour
