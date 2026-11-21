@@ -20,7 +20,19 @@
 // nouvellePartie({ reserve }) et se lit dans etat.reserve. Quatre effets, chacun rend
 // un nouvel état ou null (refusé : rien ne change, le bonus n'est pas consommé) :
 // supprimerPiece, tournerPiece, changerPieces, annulerCoup. gagnerBonus ajoute un bonus
-// à la réserve (les conditions de gain sont de BS43).
+// à la réserve ; les conditions qui en gagnent sont ci-dessous (BS43).
+//
+// Gains (BS43, gains.js) : chaque pose peut rapporter des bonus, rangés dans
+// dernierCoup.gains [{ cause, sorte, ajoute }] et ajoutés à la réserve (plafonnée). Cinq
+// causes sont mesurées au coup ou à l'état (lignes, croisement, grilleVidee, defi, palier),
+// la sixième est la case surprise : portée par une case d'une pièce du tirage (pièce.surprise
+// = { ligne, col } dans la pièce), elle prend sa place sur la grille (etat.surprise = { ligne,
+// col, reste }) quand la pièce est posée, son compte à rebours baisse à chaque pose suivante.
+// Une grille vidée donne un gain « au choix » : etat.choix compte les choix en attente,
+// choisirBonus(etat, sorte) en consomme un. Le défi (etat.defi), le prochain palier
+// (etat.palier) et la surprise font partie de la partie exportée. Leur hasard (la sorte d'une
+// surprise gagnée, la pièce qui la porte) a sa propre suite, etat.hasardGains, à part de celle
+// du tirage : ajouter les gains n'a pas changé un seul tirage.
 //
 // Fin de partie : bloquee(etat) dit seulement qu'aucune pièce en main ne tient nulle
 // part, et piecesJouables(etat) lesquelles tiennent. La partie n'est perdue
@@ -29,7 +41,8 @@
 import { REGLAGES } from './reglages.js'
 import { piece, pieceSuivante } from './pieces.js'
 import { NIVEAU_PAR_DEFAUT, niveauValide } from './niveaux.js'
-import { SORTES, reserveVide, ajouterBonus, retirerBonus, lireReserve } from './bonus.js'
+import { SORTES, sorteValide, reserveVide, ajouterBonus, retirerBonus, lireReserve } from './bonus.js'
+import { AU_CHOIX, nouveauDefi, compteSurprise, gainsDeCoup } from './gains.js'
 
 // Le niveau est un réglage de la partie : un niveau illisible retombe sur le niveau 1.
 // La réserve de bonus est celle du joueur (sans réserve donnée, la partie commence à
@@ -44,10 +57,11 @@ export function nouvellePartie({ graine = Date.now(), niveau = NIVEAU_PAR_DEFAUT
   return etat
 }
 
-function etatVide(reglages, graine, niveau) {
+function etatVide(reglages, graine, niveauDemande) {
+  const niveau = niveauValide(niveauDemande) ? niveauDemande : NIVEAU_PAR_DEFAUT
   return {
     reglages,
-    niveau: niveauValide(niveau) ? niveau : NIVEAU_PAR_DEFAUT,
+    niveau,
     grille: Array.from({ length: reglages.lignes }, () => Array(reglages.colonnes).fill(null)),
     enCours: [],
     suivantes: [],
@@ -58,8 +72,17 @@ function etatVide(reglages, graine, niveau) {
     // Rang dans la série : combien de coups de suite ont effacé quelque chose.
     serie: 0,
     hasard: graine >>> 0,
+    // Hasard des gains (sorte d'une surprise gagnée, pièce qui en porte une), à part.
+    hasardGains: (graine ^ 0x9e3779b9) >>> 0,
     // La réserve de bonus du joueur.
     reserve: reserveVide(),
+    // Le défi en cours { points, coups, scoreDebut, coupsFaits } ; le prochain palier de
+    // score ; la case surprise posée sur la grille { ligne, col, reste }, ou null ; les
+    // gains « au choix » en attente.
+    defi: nouveauDefi(niveau, 0, reglages.gains),
+    palier: reglages.gains.palier,
+    surprise: null,
+    choix: 0,
     // L'état d'avant la dernière pose, pour annulerCoup ; null s'il n'y a rien à annuler.
     annulation: null,
     dernierCoup: null,
@@ -106,6 +129,9 @@ export function poser(etat, index, ligne, col) {
   e.coups += 1
 
   e.enCours[index] = null
+  const grilleVidee = e.grille.every((r) => r.every((v) => v === null))
+  const { gains, defiFini, surprise } = gagner(e, enMain, { lignes, colonnes, casesDisparues, ligne, col, grilleVidee })
+  e.annulation.gagnes = appliquerGains(e, gains)
   const nouveauTour = finDeTour(e)
 
   e.dernierCoup = {
@@ -120,7 +146,10 @@ export function poser(etat, index, ligne, col) {
     points,
     multiplicateur,
     serie: e.serie,
-    grilleVidee: e.grille.every((r) => r.every((v) => v === null)),
+    grilleVidee,
+    gains,
+    defiFini,
+    surprise,
     nouveauTour,
     bloquee: bloquee(e),
     perdue: perdue(e),
@@ -139,6 +168,7 @@ function finDeTour(e) {
 }
 
 // Ce qu'annulerCoup rend : l'état d'une partie hors réserve et niveau, en données simples.
+// La réserve n'y figure pas : annulerCoup en retire seulement ce que la pose a rapporté.
 function instantane(etat) {
   return {
     grille: etat.grille.map((r) => [...r]),
@@ -149,6 +179,14 @@ function instantane(etat) {
     tours: etat.tours,
     serie: etat.serie,
     hasard: etat.hasard,
+    hasardGains: etat.hasardGains,
+    defi: { ...etat.defi },
+    palier: etat.palier,
+    surprise: etat.surprise && { ...etat.surprise },
+    choix: etat.choix,
+    // Les bonus que la pose rapportera à la réserve (rempli par poser, une fois les gains
+    // connus) : annulerCoup les retire avec la pose, sans toucher au reste de la réserve.
+    gagnes: reserveVide(),
   }
 }
 
@@ -205,6 +243,22 @@ export function gagnerBonus(etat, sorte, n = 1) {
   return reserve === etat.reserve ? etat : { ...etat, reserve }
 }
 
+// Grille vidée : le gain est « au choix ». Il attend dans etat.choix (le nombre de choix
+// non faits) ; choisirBonus en consomme un et ajoute à la réserve la sorte choisie (plafond
+// comme tout gain : le surplus est perdu). Refusé (null, rien ne change) s'il n'y a aucun
+// choix en attente ou si la sorte est inconnue. Choisir empêche d'annuler la pose, comme
+// employer un bonus : le gain qu'on vient de prendre ne doit pas se gagner deux fois.
+export function choisirBonus(etat, sorte) {
+  if (!(etat.choix > 0) || !sorteValide(sorte)) return null
+  const e = cloner(etat)
+  e.choix -= 1
+  e.reserve = ajouterBonus(etat.reserve, sorte)
+  e.annulation = null
+  e.dernierCoup = null
+  e.dernierBonus = { sorte: 'choisir', choisie: sorte, ajoute: e.reserve[sorte] > etat.reserve[sorte] }
+  return e
+}
+
 // Le bonus de cette sorte est-il employable maintenant (en réserve, et son effet
 // possible) ? `index` est la place de la pièce visée, pour supprimer et tourner.
 export function peutUtiliser(etat, sorte, index) {
@@ -249,6 +303,9 @@ export function tournerPiece(etat, index) {
   if (!e) return null
   const avant = e.enCours[index]
   e.enCours[index] = { ...avant, id: pieceSuivante(avant.id) }
+  // La case surprise tourne avec la pièce : un quart de tour horaire envoie (l, c) en
+  // (c, hauteur - 1 - l), comme le catalogue (pieces.js).
+  if (avant.surprise) e.enCours[index].surprise = { ligne: avant.surprise.col, col: piece(avant.id).hauteur - 1 - avant.surprise.ligne }
   e.dernierBonus = { sorte: 'tourner', index, avant: avant.id, apres: e.enCours[index].id }
   return e
 }
@@ -264,6 +321,8 @@ export function changerPieces(etat) {
   const anciennes = e.enCours.map((x) => x && x.id)
   const places = e.enCours.flatMap((x, i) => (x ? [i] : []))
   e.enCours = e.enCours.map(() => null)
+  // L'aperçu va être retiré aussi : une surprise qu'il portait ne compte plus.
+  e.suivantes = []
   const neuves = tirer(e, places.length)
   places.forEach((place, i) => { e.enCours[place] = neuves[i] })
   e.suivantes = tirer(e, e.reglages.piecesParTour)
@@ -272,7 +331,9 @@ export function changerPieces(etat) {
 }
 
 // Annuler : rend l'état exact d'avant la dernière pose (grille, score, série, pièces du
-// tour, aperçu, compteurs, état du hasard : la suite reste cohérente). Un seul coup en
+// tour, aperçu, compteurs, état du hasard, défi, palier, surprise, choix en attente : la
+// suite reste cohérente). Les bonus que cette pose avait rapportés sont retirés de la
+// réserve : annuler ne permet pas de les gagner deux fois. Un seul coup en
 // arrière, jamais deux de suite ; le bonus consommé n'est pas rendu. Refusé s'il n'y a
 // pas de coup à annuler : début de partie, coup déjà annulé, ou bonus de supprimer,
 // tourner ou changer employé depuis la pose (il a touché aux pièces que l'état d'avant
@@ -289,6 +350,14 @@ export function annulerCoup(etat) {
   e.tours = avant.tours
   e.serie = avant.serie
   e.hasard = avant.hasard
+  e.hasardGains = avant.hasardGains
+  e.defi = { ...avant.defi }
+  e.palier = avant.palier
+  e.surprise = avant.surprise && { ...avant.surprise }
+  e.choix = avant.choix
+  // Les bonus gagnés par la pose s'en vont avec elle (le choix en attente aussi, plus haut) ;
+  // celui qu'on vient d'employer n'est pas rendu.
+  for (const sorte of SORTES) e.reserve[sorte] = Math.max(0, e.reserve[sorte] - avant.gagnes[sorte])
   e.dernierBonus = { sorte: 'annuler' }
   return e
 }
@@ -318,14 +387,99 @@ function tournerUtile(etat) {
 // réserve ne peut changer cela. Tant qu'il en existe un, la partie continue : le joueur
 // doit l'utiliser (un « supprimer » compte même s'il y a plus de pièces bloquées que de
 // bonus : il faut aller au bout).
-export const perdue = (etat) => bloquee(etat) && bonusUtiles(etat).length === 0
+// Un bonus « au choix » en attente (grille vidée) compte aussi : il peut donner supprimer ou changer.
+export const perdue = (etat) => bloquee(etat) && etat.choix === 0 && bonusUtiles(etat).length === 0
+
+// --- Gains ------------------------------------------------------------------
+
+// Les gains que la pose vient de mériter, d'après le coup (grille déjà effacée, score et
+// compteurs à jour) : le défi, le palier et la case surprise y sont décidés et l'état `e`
+// les reflète. Rend { gains, defiFini, surprise } : la liste [{ cause, sorte }] dans l'ordre
+// de gains.js, comment le défi a fini ('reussi', 'rate' ou null), ce qu'il est advenu de la
+// case surprise ('posee', 'gagnee', 'perdue' ou null).
+function gagner(e, enMain, { lignes, colonnes, casesDisparues, ligne, col, grilleVidee }) {
+  const g = e.reglages.gains
+  const gains = gainsDeCoup({ lignes: lignes.length, colonnes: colonnes.length, grilleVidee }, g)
+
+  // Défi : les points gagnés depuis son début, tous comptés, dans les coups accordés.
+  const defi = { ...e.defi, coupsFaits: e.defi.coupsFaits + 1 }
+  let defiFini = null
+  if (e.score - defi.scoreDebut >= defi.points) {
+    defiFini = 'reussi'
+    gains.push({ cause: 'defi', sorte: 'supprimer' })
+  } else if (defi.coupsFaits >= defi.coups) {
+    defiFini = 'rate'
+  }
+  // Fini, réussi ou raté : un nouveau défi arrive aussitôt, compté à partir de maintenant.
+  e.defi = defiFini ? nouveauDefi(e.niveau, e.score, g) : defi
+
+  // Paliers de score : un par seuil franchi, un gros coup peut en franchir plusieurs.
+  while (e.score >= e.palier) {
+    gains.push({ cause: 'palier', sorte: 'changer', palier: e.palier })
+    e.palier += g.palier
+  }
+
+  // Case surprise. Celle de la grille : effacée avant que son numéro tombe à zéro, elle
+  // rapporte un bonus au hasard ; la pose qui l'efface compte même si c'était la dernière.
+  // Celle que la pièce posée porte prend la place de la grille à son tour (et, si cette
+  // pose la complète, elle est gagnée tout de suite). Une seule à la fois : la porteuse
+  // ne peut arriver que si la grille n'en a plus.
+  let surprise = null
+  const effacee = (s) => casesDisparues.some((c) => c.ligne === s.ligne && c.col === s.col)
+  const gagnee = () => {
+    surprise = 'gagnee'
+    gains.push({ cause: 'surprise', sorte: SORTES[Math.floor(aleatoire(e, 'hasardGains') * SORTES.length)] })
+  }
+  if (e.surprise) {
+    if (effacee(e.surprise)) {
+      gagnee()
+      e.surprise = null
+    } else if (e.surprise.reste <= 1) {
+      surprise = 'perdue'
+      e.surprise = null
+    } else {
+      e.surprise = { ...e.surprise, reste: e.surprise.reste - 1 }
+    }
+  }
+  if (enMain.surprise) {
+    const place = { ligne: ligne + enMain.surprise.ligne, col: col + enMain.surprise.col }
+    if (effacee(place)) gagnee()
+    else {
+      e.surprise = { ...place, reste: compteSurprise(e.niveau, g) }
+      surprise = 'posee'
+    }
+  }
+  return { gains, defiFini, surprise }
+}
+
+// Ajoute les gains à la réserve de `e` (plafonnée) ou aux choix en attente, et complète
+// chaque gain de `ajoute` : vrai s'il est entré dans la réserve, faux s'il est perdu au-delà
+// du plafond ou « au choix » (pas encore choisi). Rend les bonus réellement gagnés, par
+// sorte, de quoi les retirer si la pose est annulée.
+function appliquerGains(e, gains) {
+  const gagnes = reserveVide()
+  for (const gain of gains) {
+    gain.ajoute = false
+    if (gain.sorte === AU_CHOIX) {
+      e.choix += 1
+      continue
+    }
+    const avant = e.reserve[gain.sorte]
+    e.reserve = ajouterBonus(e.reserve, gain.sorte)
+    gain.ajoute = e.reserve[gain.sorte] > avant
+    if (gain.ajoute) gagnes[gain.sorte] += 1
+  }
+  return gagnes
+}
 
 // --- Garder une partie ----------------------------------------------------
 
 // Change quand la forme des données gardées change : une partie gardée avec un
 // autre numéro n'est plus relue.
 // 2 (BS42) : la réserve de bonus et l'instantané d'annulation s'ajoutent à la partie.
-export const SCHEMA_PARTIE = 2
+// 3 (BS43) : le défi, le palier, la case surprise (sur la grille et sur les pièces), les choix
+// en attente, le hasard des gains et les bonus rapportés par la dernière pose (annulation).
+export const SCHEMA_PARTIE = 3
 
 // L'état d'une partie en données simples (JSON), sans `reglages` (il contient une
 // fonction), `dernierCoup` ni `dernierBonus` (utiles au seul affichage du dernier geste).
@@ -338,13 +492,13 @@ export function exporterPartie(etat) {
     niveau: etat.niveau,
     ...figerInstantane(etat),
     reserve: { ...etat.reserve },
-    annulation: etat.annulation && figerInstantane(etat.annulation),
+    annulation: etat.annulation && { ...figerInstantane(etat.annulation), gagnes: { ...etat.annulation.gagnes } },
   }
 }
 
 // Les données qu'un instantané et une partie ont en commun : tout, hors niveau et réserve.
 function figerInstantane(x) {
-  const figer = (p) => p && { id: p.id, couleur: p.couleur }
+  const figer = (p) => p && { id: p.id, couleur: p.couleur, ...(p.surprise && { surprise: { ligne: p.surprise.ligne, col: p.surprise.col } }) }
   return {
     grille: x.grille.map((r) => [...r]),
     enCours: x.enCours.map(figer),
@@ -354,6 +508,11 @@ function figerInstantane(x) {
     tours: x.tours,
     serie: x.serie,
     hasard: x.hasard,
+    hasardGains: x.hasardGains,
+    defi: { ...x.defi },
+    palier: x.palier,
+    surprise: x.surprise && { ...x.surprise },
+    choix: x.choix,
   }
 }
 
@@ -376,6 +535,10 @@ function lirePartie(d, reglages) {
   // Rien à annuler (null), ou l'état d'avant la dernière pose, lu avec les mêmes règles.
   const annulation = d.annulation === null ? null : lireInstantane(d.annulation, reglages)
   if (d.annulation !== null && !annulation) return null
+  // Ce que la pose à annuler a rapporté à la réserve : une réserve (entiers de 0 au plafond).
+  const gagnes = annulation && lireReserve(d.annulation.gagnes)
+  if (annulation && !gagnes) return null
+  if (annulation) annulation.gagnes = gagnes
 
   return { ...etatVide(reglages, photo.hasard, d.niveau), ...photo, reserve, annulation }
 }
@@ -393,7 +556,14 @@ function lireInstantane(d, reglages) {
   if (!Array.isArray(d.grille) || d.grille.length !== lignes) return null
   if (!d.grille.every((r) => Array.isArray(r) && r.length === colonnes && r.every((v) => v === null || couleur(v)))) return null
 
-  const lirePiece = (x) => (x && typeof x === 'object' && piece(x.id) && couleur(x.couleur) ? { id: x.id, couleur: x.couleur } : undefined)
+  // Une pièce { id, couleur } et, si elle porte la case surprise, sa place dans la pièce.
+  const lirePiece = (x) => {
+    if (!x || typeof x !== 'object' || !piece(x.id) || !couleur(x.couleur)) return undefined
+    if (x.surprise === undefined) return { id: x.id, couleur: x.couleur }
+    const s = x.surprise
+    if (!s || typeof s !== 'object' || !piece(x.id).cases.some((c) => c.ligne === s.ligne && c.col === s.col)) return undefined
+    return { id: x.id, couleur: x.couleur, surprise: { ligne: s.ligne, col: s.col } }
+  }
   if (!Array.isArray(d.enCours) || d.enCours.length !== piecesParTour) return null
   if (!Array.isArray(d.suivantes) || d.suivantes.length !== piecesParTour) return null
   const enCours = d.enCours.map((x) => (x === null ? null : lirePiece(x)))
@@ -401,6 +571,14 @@ function lireInstantane(d, reglages) {
   if (enCours.includes(undefined) || suivantes.includes(undefined)) return null
   // Un tour dont les trois pièces sont posées a déjà laissé place au suivant.
   if (enCours.every((x) => x === null)) return null
+
+  const gains = lireGains(d, reglages, entier)
+  if (!gains) return null
+  // Une seule case surprise à la fois, sur la grille ou sur une pièce, et posée sur une case occupée.
+  const portees = [...enCours, ...suivantes].filter((x) => x && x.surprise).length
+  if (portees + (gains.surprise ? 1 : 0) > 1) return null
+  if (gains.surprise && d.grille[gains.surprise.ligne][gains.surprise.col] === null) return null
+  if (d.palier <= d.score) return null
 
   return {
     grille: d.grille.map((r) => [...r]),
@@ -411,6 +589,28 @@ function lireInstantane(d, reglages) {
     tours: d.tours,
     serie: d.serie,
     hasard: d.hasard,
+    ...gains,
+  }
+}
+
+// Le défi, le palier, la case surprise de la grille, les choix en attente et le hasard des
+// gains, relus et vérifiés : { hasardGains, defi, palier, surprise, choix }, ou null.
+function lireGains(d, reglages, entier) {
+  const { defi, surprise } = d
+  if (!entier(d.hasardGains, 0, 0xffffffff) || !entier(d.palier, 1) || !entier(d.choix, 0)) return null
+  if (!defi || typeof defi !== 'object' || !entier(defi.points, 1) || !entier(defi.coups, 1)) return null
+  if (!entier(defi.scoreDebut, 0, d.score) || !entier(defi.coupsFaits, 0, defi.coups - 1)) return null
+  if (surprise !== null) {
+    if (!surprise || typeof surprise !== 'object') return null
+    if (!entier(surprise.ligne, 0, reglages.lignes - 1) || !entier(surprise.col, 0, reglages.colonnes - 1)) return null
+    if (!entier(surprise.reste, 1, Math.max(...reglages.gains.surprise.compte))) return null
+  }
+  return {
+    hasardGains: d.hasardGains,
+    defi: { points: defi.points, coups: defi.coups, scoreDebut: defi.scoreDebut, coupsFaits: defi.coupsFaits },
+    palier: d.palier,
+    surprise: surprise && { ligne: surprise.ligne, col: surprise.col, reste: surprise.reste },
+    choix: d.choix,
   }
 }
 
@@ -424,19 +624,27 @@ export function versTexte(etat) {
 
 // Un état depuis un dessin de la grille (la rangée i est la ligne i, les rangées
 // absentes sont vides ; tout caractère autre que '.' est une case de cette couleur)
-// et des pièces données par leur id (null : déjà posée). Sans pièces données, elles
-// sont tirées comme en partie.
-export function depuisTexte({ rangees = [], enCours, suivantes, niveau = NIVEAU_PAR_DEFAUT, graine = 1, reserve = reserveVide(), reglages = REGLAGES }) {
+// et des pièces données par leur id (null : déjà posée) ou par { id, surprise: { ligne,
+// col } } pour une pièce qui porte la case surprise. Sans pièces données, elles sont
+// tirées comme en partie. Défi, palier, surprise (de la grille) et choix se posent à la
+// main pour les essais ; sans eux, ce sont ceux d'une partie qui commence.
+export function depuisTexte({ rangees = [], enCours, suivantes, niveau = NIVEAU_PAR_DEFAUT, graine = 1, reserve = reserveVide(), reglages = REGLAGES, score, defi, palier, surprise, choix }) {
   const e = etatVide(reglages, graine, niveau)
   e.reserve = { ...reserve }
+  if (score !== undefined) e.score = score
+  if (defi) e.defi = { ...e.defi, ...defi }
+  if (palier !== undefined) e.palier = palier
+  if (surprise) e.surprise = { ...surprise }
+  if (choix !== undefined) e.choix = choix
   rangees.forEach((r, l) => {
     if (r.length !== reglages.colonnes) throw new RangeError(`rangée ${l} de ${r.length} cases au lieu de ${reglages.colonnes}`)
     e.grille[l] = [...r].map((c) => (c === '.' ? null : c))
   })
-  const enMain = (id) => {
-    if (id === null) return null
+  const enMain = (donnee) => {
+    if (donnee === null) return null
+    const { id, surprise: porte } = typeof donnee === 'string' ? { id: donnee } : donnee
     if (!piece(id)) throw new RangeError(`pièce inconnue : ${id}`)
-    return { id, couleur: reglages.couleurPiece }
+    return { id, couleur: reglages.couleurPiece, ...(porte && { surprise: { ...porte } }) }
   }
   e.enCours = enCours ? enCours.map(enMain) : tirer(e, reglages.piecesParTour)
   e.suivantes = suivantes ? suivantes.map(enMain) : tirer(e, reglages.piecesParTour)
@@ -460,15 +668,32 @@ function tirer(etat, nombre) {
   if (!Array.isArray(ids) || ids.length !== nombre || !ids.every((id) => piece(id))) {
     throw new Error(`tirage invalide : ${JSON.stringify(ids)}`)
   }
-  return ids.map((id) => ({ id, couleur: reglages.couleurPiece }))
+  return marquerSurprise(etat, ids.map((id) => ({ id, couleur: reglages.couleurPiece })))
+}
+
+// Une pièce tirée peut porter la case surprise (chance reglages.gains.surprise.frequence),
+// tant qu'aucune n'existe, ni sur la grille ni dans une pièce en main ou en aperçu : une
+// seule à la fois. Le hasard vient de la suite des gains.
+function marquerSurprise(etat, pieces) {
+  const { frequence } = etat.reglages.gains.surprise
+  let existe = etat.surprise !== null || [...etat.enCours, ...etat.suivantes].some((x) => x && x.surprise)
+  return pieces.map((x) => {
+    if (existe || !(aleatoire(etat, 'hasardGains') < frequence)) return x
+    existe = true
+    const cases = piece(x.id).cases
+    const c = cases[Math.floor(aleatoire(etat, 'hasardGains') * cases.length)]
+    return { ...x, surprise: { ligne: c.ligne, col: c.col } }
+  })
 }
 
 const rangs = (n) => Array.from({ length: n }, (_, i) => i)
 
 // Générateur reproductible (mulberry32) : sa graine vit dans l'état, qui reste
 // ainsi un objet simple qu'on peut enregistrer et rejouer.
-function aleatoire(etat) {
-  let t = (etat.hasard = (etat.hasard + 0x6d2b79f5) >>> 0)
+// Deux suites : `hasard` (le tirage) et `hasardGains` (les gains), pour que l'une
+// n'avance pas quand l'autre sert.
+function aleatoire(etat, suite = 'hasard') {
+  let t = (etat[suite] = (etat[suite] + 0x6d2b79f5) >>> 0)
   t = Math.imul(t ^ (t >>> 15), t | 1)
   t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296

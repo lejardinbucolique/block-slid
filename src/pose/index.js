@@ -11,6 +11,7 @@ export {
   ajouterBonus,
   lireReserve,
 } from './bonus.js'
+export { GAINS, AU_CHOIX, CAUSES, nouveauDefi, compteSurprise, pointsMaxParPose, pointsMaxEnCoups } from './gains.js'
 export {
   nouvellePartie,
   poser,
@@ -20,6 +21,7 @@ export {
   bloquee,
   perdue,
   gagnerBonus,
+  choisirBonus,
   peutUtiliser,
   supprimerPiece,
   tournerPiece,

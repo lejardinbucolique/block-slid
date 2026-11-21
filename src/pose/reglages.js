@@ -2,6 +2,7 @@
 // Pour essayer d'autres valeurs : nouvellePartie({ reglages: { ...REGLAGES, plafondSerie: 8 } }).
 
 import { tirageGaranti } from './tirage-garanti.js'
+import { GAINS } from './gains.js'
 
 // Multiplicateur le plus haut d'une série de coups qui effacent : le deuxième
 // coup de suite double tout, le troisième triple... jusqu'à ce plafond.
@@ -19,6 +20,9 @@ export const REGLAGES = Object.freeze({
   pointsParCase: 1,
   pointsParCaseEffacee: 10,
   plafondSerie: PLAFOND_SERIE,
+
+  // Gains de bonus (BS43) : conditions, défi, palier, cases surprises, voir gains.js.
+  gains: GAINS,
 
   // Couleur que reçoit une pièce tirée, transmise telle quelle à ses cases posées.
   // Les modes de couleur viendront en BS44.
