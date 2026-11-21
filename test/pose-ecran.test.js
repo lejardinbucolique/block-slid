@@ -123,6 +123,104 @@ test('pose.css : le mouvement réduit garde l\'élévation, sans animation', () 
   assert.match(media, /animation-duration: \.01s !important/)
 })
 
+// --- Les textures de block-slid, aussi sur les cases de block-pose (BS46) ---------------------------------
+
+// Découpe un CSS en règles de premier niveau : { selecteurs: [...], corps }, sans les @-règles.
+function regles(css) {
+  const sans = css.replace(/\/\*[\s\S]*?\*\//g, '')
+  const out = []
+  let prof = 0
+  let prelude = ''
+  let chaine = null
+  for (let i = 0; i < sans.length; i++) {
+    const c = sans[i]
+    if (chaine) {
+      if (prof === 0) prelude += c
+      if (c === '\\') { i++; if (prof === 0) prelude += sans[i] } else if (c === chaine) chaine = null
+      continue
+    }
+    if (c === '"' || c === '\'') { chaine = c; if (prof === 0) prelude += c; continue }
+    if (c === '{') { prof++; continue }
+    if (c === '}') {
+      prof--
+      if (prof === 0) {
+        const texte = prelude.trim()
+        if (!texte.startsWith('@')) out.push({ selecteurs: separer(texte) })
+        prelude = ''
+      }
+      continue
+    }
+    if (prof === 0) prelude += c
+  }
+  return out
+}
+
+// Sépare une liste de sélecteurs sur les virgules hors crochets, parenthèses et chaînes.
+function separer(texte) {
+  const liste = []
+  let courant = ''
+  let prof = 0
+  let chaine = null
+  for (const c of texte) {
+    if (chaine) { courant += c; if (c === chaine) chaine = null; continue }
+    if (c === '"' || c === '\'') chaine = c
+    if (c === '(' || c === '[') prof++
+    if (c === ')' || c === ']') prof--
+    if (c === ',' && prof === 0) { liste.push(courant.trim()); courant = ''; continue }
+    courant += c
+  }
+  liste.push(courant.trim())
+  return liste
+}
+
+const jumeau = (sel) => sel.replace(/#plateau/g, '#pose').replace(/\.bloc(?![\w-])/g, '.pose-bloc')
+const original = (sel) => sel.replace(/#pose/g, '#plateau').replace(/\.pose-bloc/g, '.bloc')
+
+test('style.css : chaque règle d\'un style de block-slid vaut aussi pour les cases de block-pose', () => {
+  const toutes = regles(lire('style.css'))
+  const presents = new Set(toutes.flatMap((r) => r.selecteurs))
+  const styles = [...presents].filter((s) => /^#plateau\[data-style="[a-z]+"\]/.test(s) && !s.includes('.instant'))
+  assert.ok(styles.length > 150, `${styles.length} sélecteurs de styles trouvés`)
+  assert.deepEqual(styles.filter((s) => !presents.has(jumeau(s))), [])
+  // Un jumeau ne vit jamais seul : il est dans la même règle que son original, donc avec les mêmes déclarations.
+  for (const r of toutes) {
+    for (const s of r.selecteurs) {
+      if (s.startsWith('#pose[data-style=')) assert.ok(r.selecteurs.includes(original(s)), s)
+    }
+  }
+})
+
+test('style.css : les dix textures ont leur jumeau, avec leur effacement', () => {
+  const css = lire('style.css')
+  for (const style of ['laine', 'beton', 'bois', 'bonbon', 'papier', 'metal', 'verre', 'marbre', 'neon', 'gemme']) {
+    assert.ok(css.includes(`#pose[data-style="${style}"] .pose-bloc > i`), `${style} : le dessin`)
+    assert.ok(css.includes(`#pose[data-style="${style}"] .pose-bloc.efface`), `${style} : l'effacement`)
+  }
+})
+
+test('pose.css : les effets qui balaient une ligne ont leur version pour une colonne, sous les mêmes styles', () => {
+  const css = lire('src/pose/pose.css')
+  for (const style of ['laine', 'beton', 'bois', 'papier', 'metal', 'verre', 'marbre', 'gemme']) {
+    assert.match(css, new RegExp(`#pose\\[data-style="${style}"\\] \\.pose-bloc\\.(allume|efface)\\.v`), style)
+  }
+  // Chaque animation verticale nommée existe.
+  const noms = [...css.matchAll(/animation-name: ([a-z-]+-v);/g)].map((m) => m[1])
+  assert.ok(noms.length >= 8)
+  for (const nom of noms) assert.ok(css.includes(`@keyframes ${nom} {`), nom)
+})
+
+test('l\'écran donne à chaque case un bloc à deux éléments, et allume puis efface comme block-slid', () => {
+  const source = lire('src/pose/ecran.js')
+  assert.match(source, /bloc\.append\(document\.createElement\('i'\)\)/)
+  assert.match(source, /sensEffacement\(coup\)/)
+  assert.match(source, /marquerEffacement\(coup, 'allume'\)/)
+  assert.match(source, /marquerEffacement\(coup, 'efface'\)/)
+  // Le style Uni garde son effacement direct, sans temps d'allumage.
+  assert.match(source, /if \(style === STYLE_UNI\)/)
+  // Les textures lisent le nombre de cases d'une ligne.
+  assert.match(source, /fixer\('--cols'/)
+})
+
 // --- Mise en ligne ---------------------------------------------------------------------------------
 
 test('sw.js précache tout ce que l\'écran de block-pose charge, et chaque fichier existe', () => {

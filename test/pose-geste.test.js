@@ -15,6 +15,7 @@ import {
   apercuCoup,
   casesElevees,
   centreEffacement,
+  sensEffacement,
   tailleCellule,
 } from '../src/pose/index.js'
 
@@ -232,4 +233,49 @@ test('la plus large des pièces tient dans un emplacement, aux deux échelles de
   for (const echelle of [0.5, 0.3]) {
     assert.ok(largeurMax * echelle <= REGLAGES.colonnes / REGLAGES.piecesParTour, `échelle ${echelle}`)
   }
+})
+
+// --- Le sens dans lequel s'efface chaque case (BS46) -------------------------------------------
+
+test('sens d\'effacement : une ligne s\'efface de gauche à droite, une colonne de haut en bas', () => {
+  const ligne = { lignes: [3], colonnes: [], casesDisparues: [{ ligne: 3, col: 0 }, { ligne: 3, col: 5 }, { ligne: 3, col: 9 }] }
+  assert.deepEqual(sensEffacement(ligne), [
+    { ligne: 3, col: 0, vertical: false, position: 0 },
+    { ligne: 3, col: 5, vertical: false, position: 5 },
+    { ligne: 3, col: 9, vertical: false, position: 9 },
+  ])
+  const colonne = { lignes: [], colonnes: [7], casesDisparues: [{ ligne: 0, col: 7 }, { ligne: 4, col: 7 }, { ligne: 9, col: 7 }] }
+  assert.deepEqual(sensEffacement(colonne).map((m) => [m.vertical, m.position]), [[true, 0], [true, 4], [true, 9]])
+})
+
+test('sens d\'effacement : au croisement la ligne l\'emporte, et chaque case garde une seule place', () => {
+  // Poser une case en (5, 4) qui complète la ligne 5 et la colonne 4.
+  const etat = depuisTexte({
+    rangees: [
+      '....a.....', '....a.....', '....a.....', '....a.....', '....a.....',
+      'aaaa.aaaaa',
+      '....a.....', '....a.....', '....a.....', '....a.....',
+    ],
+    enCours: ['bloc.0', null, null],
+  })
+  const coup = poser(etat, 0, 5, 4).dernierCoup
+  assert.deepEqual(coup.lignes, [5])
+  assert.deepEqual(coup.colonnes, [4])
+  const sens = sensEffacement(coup)
+  assert.equal(sens.length, coup.casesDisparues.length)
+  assert.equal(sens.length, 19)
+  const croisement = sens.find((m) => m.ligne === 5 && m.col === 4)
+  assert.deepEqual(croisement, { ligne: 5, col: 4, vertical: false, position: 4 })
+  // Les cases de la ligne : la position est la colonne ; celles de la colonne seule : la ligne.
+  for (const m of sens) {
+    if (m.ligne === 5) assert.deepEqual([m.vertical, m.position], [false, m.col])
+    else assert.deepEqual([m.vertical, m.position], [true, m.ligne])
+  }
+  // Toutes les positions valent 0 à 9 : un délai qui s'étale sur dix cases.
+  assert.ok(sens.every((m) => m.position >= 0 && m.position <= 9))
+})
+
+test('sens d\'effacement : plusieurs lignes à la fois restent horizontales', () => {
+  const coup = { lignes: [2, 3], colonnes: [], casesDisparues: [{ ligne: 2, col: 1 }, { ligne: 3, col: 8 }] }
+  assert.deepEqual(sensEffacement(coup).map((m) => [m.vertical, m.position]), [[false, 1], [false, 8]])
 })

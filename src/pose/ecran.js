@@ -40,6 +40,7 @@ import {
   casesElevees,
   caseVisee,
   centreEffacement,
+  sensEffacement,
   tailleCellule,
 } from './index.js'
 import { JEU_BLOCK_POSE } from '../jeux.js'
@@ -61,7 +62,7 @@ import {
   oublierPartiePose,
   vibrer,
 } from '../ui/stockage.js'
-import { stylesDebloques, nouveauxStyles, styleAutorise, resumeStyles } from '../ui/styles.js'
+import { STYLE_UNI, stylesDebloques, nouveauxStyles, styleAutorise, resumeStyles } from '../ui/styles.js'
 
 // --- Réglages de l'écran (la seule place où les caler) ---------------------------------------
 
@@ -77,6 +78,10 @@ const DECALAGE_DOIGT_CASES = 1.15
 // Durées des étapes d'un coup, en ms : juste de quoi les voir, pour que la chaîne reste vive.
 const DUREE_POSE_MS = 140
 const DUREE_EFFACE_MS = 300
+// Sous une texture, l'effacement se joue comme celui de block-slid : la ligne ou la colonne pleine
+// s'allume (le fil de la Laine, l'éclat du Verre...), puis ses cases disparaissent.
+const DUREE_ALLUME_MS = 320
+const DUREE_EFFACE_STYLE_MS = 260
 const DUREE_POINTS_MS = 1000
 const DUREE_ENVOL_MS = 150
 const DUREE_RETOUR_MS = 190
@@ -310,13 +315,25 @@ export async function demarrerJeu() {
 
   // --- Construction des éléments fixes ----------------------------------------------------
 
+  // Un bloc, une case de pièce : le même dessin sur la grille, dans les rangées de pièces et sous le
+  // doigt. Comme un bloc de block-slid, il tient en deux éléments : l'enveloppe (.pose-bloc, qui
+  // porte la couleur et l'état d'une animation) et le dessin (<i>), que les styles de style.css
+  // habillent à l'identique dans les deux jeux (pose.css leur donne les variables qu'ils lisent).
+  // `petit` : une pièce de la main ou de l'aperçu, qui prend la variante réduite des styles.
+  function creerBloc(petit = false) {
+    const bloc = document.createElement('div')
+    bloc.className = petit ? 'pose-bloc a1' : 'pose-bloc'
+    bloc.dataset.largeur = '1'
+    bloc.append(document.createElement('i'))
+    return bloc
+  }
+
   const cases = []
   for (let l = 0; l < REGLAGES.lignes; l++) {
     for (let k = 0; k < REGLAGES.colonnes; k++) {
       const el = document.createElement('div')
       el.className = 'pose-case'
-      const bloc = document.createElement('i')
-      bloc.className = 'pose-bloc'
+      const bloc = creerBloc()
       el.append(bloc)
       grilleEl.append(el)
       cases.push({ el, bloc })
@@ -376,6 +393,7 @@ export async function demarrerJeu() {
     fixer('--haut-main', `${cellule * ECHELLE_MAIN * RANGEES_MAX}px`)
     fixer('--haut-apercu', `${cellule * ECHELLE_APERCU * RANGEES_MAX}px`)
     fixer('--largeur-grille', `${cellule * REGLAGES.colonnes}px`)
+    fixer('--cols', String(REGLAGES.colonnes)) // les textures étalent leur animation sur une ligne de cette longueur
   }
 
   // --- Dessin ---------------------------------------------------------------------------
@@ -390,6 +408,8 @@ export async function demarrerJeu() {
         const valeur = grille[l][k]
         const estSurprise = Boolean(surprise) && valeur !== null && surprise.ligne === l && surprise.col === k
         el.className = `pose-case${valeur !== null ? ' occupee' : ''}${estSurprise ? ' surprise' : ''}`
+        bloc.className = 'pose-bloc'
+        bloc.style.removeProperty('--col')
         if (valeur !== null) bloc.style.setProperty('--couleur', couleurDe(valeur))
         if (estSurprise) el.dataset.reste = String(surprise.reste)
         else delete el.dataset.reste
@@ -481,18 +501,20 @@ export async function demarrerJeu() {
 
   // Une pièce de la main ou de l'aperçu, à la taille `taille` (une variable CSS).
   function elementPiece(enMain, taille) {
+    const petit = taille !== '--cell'
     const p = piece(enMain.id)
     const el = document.createElement('div')
     el.className = 'pose-piece'
     el.style.gridTemplate = `repeat(${p.hauteur}, var(${taille})) / repeat(${p.largeur}, var(${taille}))`
     p.cases.forEach((c, i) => {
-      const bloc = document.createElement('i')
-      bloc.className = 'pose-bloc'
+      const bloc = creerBloc(petit)
       bloc.style.gridArea = `${c.ligne + 1} / ${c.col + 1}`
       bloc.style.setProperty('--couleur', couleurDe(enMain.couleurs?.[i] ?? enMain.couleur))
       if (enMain.surprise && enMain.surprise.ligne === c.ligne && enMain.surprise.col === c.col) {
         bloc.classList.add('surprise')
-        bloc.textContent = '?'
+        const marque = document.createElement('b')
+        marque.textContent = '?'
+        bloc.append(marque)
       }
       el.append(bloc)
     })
@@ -731,12 +753,39 @@ export async function demarrerJeu() {
     pop(coup.casesPosees)
     for (const c of casesElevees(coup, REGLAGES.lignes, REGLAGES.colonnes)) laCase(c.ligne, c.col).el.classList.add('eleve')
     lecture = { minuteurs: [], fin: apres }
-    lecture.minuteurs.push(setTimeout(() => {
-      for (const c of coup.casesDisparues) laCase(c.ligne, c.col).el.classList.add('efface')
+    const apresLaPose = () => {
+      if (style === STYLE_UNI) {
+        marquerEffacement(coup, 'efface')
+        dessinerScore()
+        pointsFlottants(coup)
+        lecture.minuteurs.push(setTimeout(conclure, DUREE_EFFACE_MS))
+        return
+      }
+      // Sous une texture : la ligne s'allume, les points montent, puis ses cases disparaissent.
+      racine.style.setProperty('--duree', `${DUREE_ALLUME_MS}ms`)
+      marquerEffacement(coup, 'allume')
       dessinerScore()
       pointsFlottants(coup)
-      lecture.minuteurs.push(setTimeout(conclure, DUREE_EFFACE_MS))
-    }, DUREE_POSE_MS))
+      lecture.minuteurs.push(setTimeout(() => {
+        racine.style.setProperty('--duree', `${DUREE_EFFACE_STYLE_MS}ms`)
+        marquerEffacement(coup, 'efface')
+        lecture.minuteurs.push(setTimeout(conclure, DUREE_EFFACE_STYLE_MS))
+      }, DUREE_ALLUME_MS))
+    }
+    lecture.minuteurs.push(setTimeout(apresLaPose, DUREE_POSE_MS))
+  }
+
+  // Met chaque case que le coup efface dans l'état `genre` (« allume » ou « efface »). Les styles
+  // étalent leur animation de case en case d'après --col, la place de la case le long de sa ligne ou
+  // de sa colonne ; `v` demande la version verticale de l'effet, pour une colonne (sensEffacement).
+  function marquerEffacement(coup, genre) {
+    for (const m of sensEffacement(coup)) {
+      const { bloc } = laCase(m.ligne, m.col)
+      bloc.style.setProperty('--col', String(m.position))
+      bloc.classList.remove('allume', 'efface')
+      bloc.classList.toggle('v', m.vertical)
+      bloc.classList.add(genre)
+    }
   }
 
   // Fin du coup, jouée jusqu'au bout ou coupée par un toucher : l'état du moteur est posé.
@@ -745,6 +794,7 @@ export async function demarrerJeu() {
     const { minuteurs, fin: suite } = lecture
     lecture = null
     for (const m of minuteurs) clearTimeout(m)
+    racine.style.removeProperty('--duree')
     suite()
   }
 

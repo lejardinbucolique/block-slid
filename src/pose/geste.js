@@ -66,6 +66,18 @@ export function casesElevees(apercu, nbLignes, nbColonnes) {
   return rendues
 }
 
+// Comment chaque case disparue d'un coup s'efface (BS46) : une case d'une ligne pleine suit le sens
+// de la ligne (de gauche à droite : sa colonne est sa place), une case d'une colonne seule suit
+// celui de la colonne (de haut en bas : sa ligne est sa place). À un croisement, la ligne l'emporte.
+// Les styles de blocs étalent leur animation de case en case d'après cette place et lui donnent,
+// pour une colonne, la version verticale de leur effet. Dans l'ordre de `casesDisparues`.
+export function sensEffacement({ lignes, colonnes, casesDisparues }) {
+  return casesDisparues.map((c) => {
+    const dansUneLigne = lignes.includes(c.ligne)
+    return { ligne: c.ligne, col: c.col, vertical: !dansUneLigne, position: dansUneLigne ? c.col : c.ligne }
+  })
+}
+
 // Le centre, en cases (décimales), de ce que le coup efface : le milieu des lignes effacées
 // pour des lignes seules, des colonnes pour des colonnes seules, de la grille quand les deux se
 // croisent. C'est là que montent les points. null s'il n'y a rien d'effacé.

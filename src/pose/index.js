@@ -8,6 +8,7 @@ export {
   apercuCoup,
   casesElevees,
   centreEffacement,
+  sensEffacement,
   tailleCellule,
 } from './geste.js'
 export {
