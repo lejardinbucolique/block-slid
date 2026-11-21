@@ -395,9 +395,22 @@ button { font: inherit; color: inherit; }
 .gestes .gros:disabled, .gestes button:disabled { opacity: .35; }
 
 .reglage { display: flex; flex-direction: column; gap: .5rem; }
+.reglage[hidden] { display: none; }
 .reglage label { font-weight: 700; font-size: 1.1rem; }
 .reglage p { font-size: .9rem; opacity: .85; min-height: 1.2em; }
 .reglage h3 { margin: 0; font-size: 1.1rem; }
+
+.reglage select {
+  min-height: 44px;
+  padding: 0 .8rem;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  background: var(--case);
+  border: 0;
+  border-radius: 12px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .35);
+}
 
 .deux-boutons { display: flex; gap: .6rem; }
 .deux-boutons button {

@@ -1,4 +1,32 @@
-import { demarrerJeu } from './src/ui/jeu.js'
+import { JEUX, jeuxDisponibles, choixDeJeuVisible } from './src/jeux.js'
+import { jeuChoisi, retenirJeu } from './src/ui/stockage.js'
+
+// Un point d'entrée par jeu, chargé seulement quand le jeu est choisi (BS39).
+const POINTS_ENTREE = {
+  'block-slid': () => import('./src/ui/jeu.js'),
+  'block-pose': () => import('./src/ui/jeu-pose.js'),
+}
+
+// Le choix du jeu, dans les réglages : caché tant qu'un seul jeu est disponible.
+// Changer de jeu retient le choix puis recharge la page : la partie de chaque jeu est
+// déjà gardée à part, et rien du jeu en cours n'est à démonter.
+const jeu = jeuChoisi()
+if (choixDeJeuVisible()) {
+  const choix = document.getElementById("jeu");
+  for (const j of jeuxDisponibles()) {
+    const option = document.createElement("option");
+    option.value = j.id;
+    option.textContent = j.nom;
+    choix.append(option);
+  }
+  choix.value = jeu;
+  choix.addEventListener("change", () => {
+    if (!JEUX.some((j) => j.id === choix.value)) return;
+    retenirJeu(choix.value);
+    location.reload();
+  });
+  document.getElementById("reglage-jeu").hidden = false;
+}
 
 
 // Installation : proposée dans la fenêtre des réglages, tant que l'application
@@ -43,7 +71,9 @@ window.addEventListener("appinstalled", () => { invite = null; afficher(); });
 modeInstalle.addEventListener?.("change", afficher);
 
 afficher();
-demarrerJeu();
+POINTS_ENTREE[jeu]()
+  .then((module) => module.demarrerJeu())
+  .catch((err) => console.error("Démarrage du jeu :", err));
 
 // Mise à jour : sw.js prend la main dès qu'une nouvelle version est installée
 // (skipWaiting, clients.claim) ; la page se recharge alors une seule fois pour
