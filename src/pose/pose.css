@@ -87,9 +87,21 @@
   width: 100%;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  grid-template-areas: "meilleur score reglages" "defi defi defi";
+  grid-template-areas: "nom nom nom" "meilleur score reglages" "defi defi defi";
   align-items: center;
   padding: 6px 14px 0;
+}
+
+/* Le nom du jeu (BS49) : petit, au-dessus du score. */
+#pose-nom {
+  grid-area: nom;
+  text-align: center;
+  font-size: .8rem;
+  font-weight: 700;
+  line-height: 1rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--pose-texte-doux);
 }
 
 #pose-meilleur {
@@ -437,6 +449,7 @@
 
 #pose-aide {
   flex: none;
+  margin-top: auto; /* l'aide et les bonus tout en bas, les pièces restent sous la grille (BS49) */
   min-height: 1.3rem;
   padding: 0 14px;
   font-size: .9rem;
@@ -519,7 +532,7 @@
 #pose-infos {
   position: fixed;
   left: 50%;
-  top: calc(env(safe-area-inset-top) + 7.2rem);
+  top: calc(env(safe-area-inset-top) + 8.2rem); /* sous l'en-tête, nom du jeu compris (BS49) */
   z-index: 5;
   width: min(92%, 22rem);
   display: flex;

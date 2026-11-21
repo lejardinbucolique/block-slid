@@ -43,7 +43,7 @@ import {
   sensEffacement,
   tailleCellule,
 } from './index.js'
-import { JEU_BLOCK_POSE } from '../jeux.js'
+import { JEU_BLOCK_POSE, JEUX } from '../jeux.js'
 import {
   NIVEAUX_VIBRATION,
   meilleurScorePose,
@@ -162,8 +162,12 @@ function reserveDuJoueur() {
   return lireReserve(Object.fromEntries(SORTES.map((s) => [s, lue[s] ?? 0])))
 }
 
+// Le nom du jeu, en haut de l'écran (BS49) : pris du registre des jeux.
+const NOM_JEU = JEUX.find((j) => j.id === JEU_BLOCK_POSE).nom
+
 const HTML_RACINE = `
   <header id="pose-haut">
+    <div id="pose-nom">${NOM_JEU}</div>
     <div id="pose-meilleur" aria-label="Meilleur score">${TROPHEE}<span id="pose-meilleur-score">0</span></div>
     <div id="pose-score-bloc">
       <div id="pose-score" aria-label="Score">0</div>
@@ -181,10 +185,10 @@ const HTML_RACINE = `
       <div id="pose-effets" aria-hidden="true"></div>
     </div>
   </div>
-  <div id="pose-bonus" role="group" aria-label="Bonus"></div>
-  <div id="pose-aide" role="status" aria-live="polite"></div>
   <div id="pose-main" role="group" aria-label="Pièces à poser"></div>
   <div id="pose-apercu" role="group" aria-label="Pièces suivantes"></div>
+  <div id="pose-aide" role="status" aria-live="polite"></div>
+  <div id="pose-bonus" role="group" aria-label="Bonus"></div>
   <div id="pose-infos" aria-live="polite"></div>
 
   <div id="pose-fin" class="voile" hidden>
@@ -377,7 +381,7 @@ export async function demarrerJeu() {
     const largeur = racine.clientWidth - px(cs.paddingLeft) - px(cs.paddingRight) - 2 * MARGE_LATERALE_PX
     const hauteur = racine.clientHeight - px(cs.paddingTop) - px(cs.paddingBottom)
     const ecart = px(cs.rowGap)
-    // Six blocs l'un sous l'autre : en-tête, grille, bonus, aide, pièces, aperçu.
+    // Six blocs l'un sous l'autre : en-tête, grille, pièces, aperçu, aide, bonus.
     const fixe = haut.offsetHeight + bonusEl.offsetHeight + aideEl.offsetHeight + 5 * ecart + 2 * CADRE_PX
     cellule = tailleCellule({
       largeur: largeur - 2 * CADRE_PX,
