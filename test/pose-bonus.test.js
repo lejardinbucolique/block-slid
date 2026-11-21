@@ -340,9 +340,11 @@ test('annuler : rend l\'état exact d\'avant la pose (score, série, pièces, ap
 test('annuler : rend le hasard, donc la suite des tirages reste la même, même en fin de tour', () => {
   const alea = generateur(5)
   for (const niveau of [2, 6, 10]) {
-    let e = nouvellePartie({ graine: 40 + niveau, niveau, reserve: tout(10) })
     let verifies = 0
-    for (let i = 0; i < 80 && !bloquee(e); i++) {
+    // Aux niveaux durs une partie au hasard est vite bloquée : on en enchaîne plusieurs.
+    for (let essai = 0; essai < 12; essai++) {
+    let e = nouvellePartie({ graine: 40 + niveau + essai * 100, niveau, reserve: tout(10) })
+    for (let i = 0; i < 200 && !bloquee(e); i++) {
       const apres = coupAuHasard(e, alea)
       const rendu = annulerCoup(apres)
       assert.deepEqual(partieSeule(rendu), partieSeule(e), `niveau ${niveau}, coup ${i}`)
@@ -354,6 +356,7 @@ test('annuler : rend le hasard, donc la suite des tirages reste la même, même 
         verifies++
       }
       e = apres
+    }
     }
     assert.ok(verifies > 3, `niveau ${niveau} : ${verifies}`)
   }

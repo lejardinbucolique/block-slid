@@ -16,16 +16,16 @@ export const NIVEAU_PAR_DEFAUT = 1
 // départ, à caler en jouant.
 export const POIDS_NIVEAUX = Object.freeze([
   //  1   2   3   4
-  [85, 15, 0, 0],
-  [75, 22, 3, 0],
-  [65, 27, 6, 2],
-  [55, 30, 10, 5],
-  [47, 31, 14, 8],
-  [40, 31, 18, 11],
-  [34, 30, 21, 15],
-  [28, 30, 24, 18],
-  [24, 28, 26, 22],
-  [20, 27, 28, 25],
+  [70, 24, 6, 0],
+  [58, 28, 11, 3],
+  [47, 31, 16, 6],
+  [38, 32, 20, 10],
+  [30, 31, 24, 15],
+  [23, 29, 27, 21],
+  [17, 26, 29, 28],
+  [12, 22, 30, 36],
+  [8, 18, 30, 44],
+  [4, 14, 28, 54],
 ].map(Object.freeze))
 
 export const niveauValide = (n) => Number.isInteger(n) && n >= NIVEAU_MIN && n <= NIVEAU_MAX

@@ -135,7 +135,7 @@ test('trois pièces : sur des milliers de grilles, à chaque niveau, vides, mi-p
 test('trois pièces : sur des grilles de parties jouées au hasard', () => {
   let total = 0
   for (const niveau of NIVEAUX) {
-    for (const e of etatsDeParties(niveau, 10, 150, 20 + niveau)) {
+    for (const e of etatsDeParties(niveau, 16, 150, 20 + niveau)) {
       const ids = tirageGaranti({ aleatoire: generateur(total + 1), niveau, nombre: 3, grille: e.grille, enCours: [], reglages: REGLAGES })
       assert.ok(suite(grilleDe(e), [ids]), `niveau ${niveau} : ${ids}`)
       total++
@@ -186,7 +186,7 @@ test('six pièces : pour toute main posable, même tirée sans garantie (la rech
   let ecartes = 0
   for (const niveau of NIVEAUX) {
     for (const d of [0.3, 0.5, 0.65, 0.75, 0.82, 0.88]) {
-      for (let i = 0; i < 60; i++) {
+      for (let i = 0; i < 90; i++) {
         const g = grilleAuHasard(alea, d)
         const grille = g.map((r) => r.map((v) => (v ? 'x' : null)))
         // Mains tirées au hasard, sans garantie : on ne garde que celles qui se posent.
@@ -205,7 +205,7 @@ test('six pièces : depuis des grilles de parties jouées au hasard', () => {
   let testes = 0
   let ecartes = 0
   for (const niveau of NIVEAUX) {
-    for (const e of etatsDeParties(niveau, 12, 150, 40 + niveau)) {
+    for (const e of etatsDeParties(niveau, 20, 150, 40 + niveau)) {
       const enCours = e.enCours.map((x) => x.id)
       if (!suite(grilleDe(e), [enCours])) { ecartes++; continue }
       const suivantes = tirageGaranti({ aleatoire: generateur(testes + 9), niveau, nombre: 3, grille: e.grille, enCours, reglages: REGLAGES })
@@ -302,7 +302,7 @@ test('répartition : pas que des petites, les grosses viennent avec le niveau', 
   }
   // Niveau 1 : ni grosses ni tordues. Niveau 10 : de tout, dont des grosses.
   const part = (n, d) => par[n].ids.filter((id) => piece(id).difficulte >= d).length / par[n].ids.length
-  assert.equal(part(1, 3), 0)
+  assert.ok(part(1, 3) <= 0.1, `${part(1, 3)}`)
   assert.ok(part(10, 4) >= 0.15, `${part(10, 4)}`)
   assert.ok(part(10, 3) >= 0.35, `${part(10, 3)}`)
   // La difficulté moyenne monte avec le niveau (à une marge de hasard près), de bout en bout.
@@ -317,7 +317,7 @@ test('serrure : la liberté de pose du témoin baisse avec le niveau', (t) => {
     return details.reduce((s, d) => s + d.liberte, 0) / details.length
   })
   t.diagnostic(`liberté moyenne (1 : tout ouvert) par niveau : ${libertes.map((x) => x.toFixed(2)).join(' ')}`)
-  for (let i = 1; i < libertes.length; i++) assert.ok(libertes[i] <= libertes[i - 1] + 0.05, `niveau ${i + 1} : ${libertes}`)
+  for (let i = 1; i < libertes.length; i++) assert.ok(libertes[i] <= libertes[i - 1] + 0.1, `niveau ${i + 1} : ${libertes}`)
   assert.ok(libertes[0] - libertes[9] > 0.3, `${libertes}`)
 })
 

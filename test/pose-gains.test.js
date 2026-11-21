@@ -450,9 +450,9 @@ test('choisir un bonus empêche d\'annuler la pose qui l\'a donné', () => {
 // --- Reproductibilité, hasard à part ----------------------------------------------
 
 function partieJouee(graine, options = {}) {
-  let e = nouvellePartie({ graine, niveau: 4, reserve: reserveInitiale(), ...options })
+  let e = nouvellePartie({ graine, niveau: 1, reserve: reserveInitiale(), ...options })
   const trace = []
-  for (let n = 0; n < 80 && piecesJouables(e).length > 0; n++) {
+  for (let n = 0; n < 300 && piecesJouables(e).length > 0; n++) {
     const index = piecesJouables(e)[0]
     const places = positionsPossibles(e, index)
     const { ligne, col } = places[(n * 5) % places.length]

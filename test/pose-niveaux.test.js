@@ -40,8 +40,8 @@ test('la difficulté croît sans jamais décroître d\'un niveau au suivant', ()
 })
 
 test('niveau 1 : surtout des pièces faciles, ni grosses ni tordues ; niveau 10 : tout le catalogue', () => {
-  assert.ok(partAuMoins(1, 2) <= 0.2)
-  assert.equal(partAuMoins(1, 3), 0)
+  assert.ok(partAuMoins(1, 2) <= 0.35)
+  assert.ok(partAuMoins(1, 3) <= 0.1)
   for (const p of poidsDesPieces(10)) assert.ok(p.poids > 0, p.id)
   assert.ok(partAuMoins(10, 4) >= 0.2)
 })
