@@ -5,12 +5,14 @@
 //
 // Grille de reglages.lignes × reglages.colonnes : lignes de haut (0) en bas,
 // colonnes de gauche (0) à droite. Une case vaut null (vide) ou la couleur de la
-// pièce posée là, simple valeur transmise par la pièce (les modes de couleur
-// viendront en BS44). Aucune gravité.
+// pièce posée là, simple valeur transmise par la pièce (un identifiant de la palette,
+// couleurs.js). Aucune gravité.
 //
 // Un tour : trois pièces en main (enCours ; une place passe à null quand sa pièce
 // est posée) et l'aperçu des trois du tour suivant (suivantes). Une pièce en main :
-// { id, couleur }, l'id étant celui du catalogue (pieces.js). Quand les trois sont
+// { id, couleur }, l'id étant celui du catalogue (pieces.js) ; une pièce aux couleurs
+// mélangées porte en plus couleurs, une couleur par case dans l'ordre des cases de la pièce
+// (sa couleur est alors la première). Quand les trois sont
 // posées, l'aperçu passe en main et un nouvel aperçu est tiré par reglages.tirage.
 //
 // Un coup rend, dans dernierCoup, de quoi animer et compter : cases posées, lignes
@@ -34,6 +36,13 @@
 // surprise gagnée, la pièce qui la porte) a sa propre suite, etat.hasardGains, à part de celle
 // du tirage : ajouter les gains n'a pas changé un seul tirage.
 //
+// Couleurs (BS44, couleurs.js) : la couleur d'une pièce est fixée à son tirage, selon l'entrée
+// en cours de la liste de choix (etat.couleurs = { entree, avances }). Chaque grille
+// vidée passe à l'entrée suivante : les pièces déjà tirées gardent leur couleur, les
+// suivantes prennent la nouvelle. Le hasard des couleurs (l'entrée tirée après le premier
+// tour, la couleur de chaque pièce ou de chaque case) a sa propre suite, etat.hasardCouleurs :
+// les pièces tirées ne dépendent jamais de l'avancement des couleurs.
+//
 // Fin de partie : bloquee(etat) dit seulement qu'aucune pièce en main ne tient nulle
 // part, et piecesJouables(etat) lesquelles tiennent. La partie n'est perdue
 // (perdue(etat)) que si, en plus, aucun bonus de la réserve ne peut changer cela.
@@ -43,6 +52,7 @@ import { piece, pieceSuivante } from './pieces.js'
 import { NIVEAU_PAR_DEFAUT, niveauValide } from './niveaux.js'
 import { SORTES, sorteValide, reserveVide, ajouterBonus, retirerBonus, lireReserve } from './bonus.js'
 import { AU_CHOIX, nouveauDefi, compteSurprise, gainsDeCoup } from './gains.js'
+import { LISTE, couleursDepart, couleursSuivantes, couleursDePieces, lireCouleurs } from './couleurs.js'
 
 // Le niveau est un réglage de la partie : un niveau illisible retombe sur le niveau 1.
 // La réserve de bonus est celle du joueur (sans réserve donnée, la partie commence à
@@ -74,6 +84,10 @@ function etatVide(reglages, graine, niveauDemande) {
     hasard: graine >>> 0,
     // Hasard des gains (sorte d'une surprise gagnée, pièce qui en porte une), à part.
     hasardGains: (graine ^ 0x9e3779b9) >>> 0,
+    // Hasard des couleurs (entrée tirée, couleur d'une pièce ou d'une case), à part aussi, et
+    // l'entrée de la liste en cours : une partie commence par la première.
+    hasardCouleurs: (graine ^ 0x7f4a7c15) >>> 0,
+    couleurs: couleursDepart(),
     // La réserve de bonus du joueur.
     reserve: reserveVide(),
     // Le défi en cours { points, coups, scoreDebut, coupsFaits } ; le prochain palier de
@@ -106,7 +120,7 @@ export function poser(etat, index, ligne, col) {
   e.dernierBonus = null
 
   const casesPosees = p.cases.map((c) => ({ ligne: ligne + c.ligne, col: col + c.col }))
-  for (const c of casesPosees) e.grille[c.ligne][c.col] = enMain.couleur
+  casesPosees.forEach((c, i) => { e.grille[c.ligne][c.col] = enMain.couleurs ? enMain.couleurs[i] : enMain.couleur })
 
   // Lignes et colonnes pleines, effacées toutes en même temps : une case à leur
   // croisement ne disparaît qu'une fois.
@@ -132,6 +146,8 @@ export function poser(etat, index, ligne, col) {
   const grilleVidee = e.grille.every((r) => r.every((v) => v === null))
   const { gains, defiFini, surprise } = gagner(e, enMain, { lignes, colonnes, casesDisparues, ligne, col, grilleVidee })
   e.annulation.gagnes = appliquerGains(e, gains)
+  // Une grille vidée change l'entrée des couleurs avant le prochain tirage.
+  if (grilleVidee) e.couleurs = couleursSuivantes(e.couleurs, () => aleatoire(e, 'hasardCouleurs'))
   const nouveauTour = finDeTour(e)
 
   e.dernierCoup = {
@@ -147,6 +163,7 @@ export function poser(etat, index, ligne, col) {
     multiplicateur,
     serie: e.serie,
     grilleVidee,
+    nouvelleEntree: grilleVidee ? LISTE[e.couleurs.entree].id : null,
     gains,
     defiFini,
     surprise,
@@ -180,6 +197,8 @@ function instantane(etat) {
     serie: etat.serie,
     hasard: etat.hasard,
     hasardGains: etat.hasardGains,
+    hasardCouleurs: etat.hasardCouleurs,
+    couleurs: { ...etat.couleurs },
     defi: { ...etat.defi },
     palier: etat.palier,
     surprise: etat.surprise && { ...etat.surprise },
@@ -303,6 +322,11 @@ export function tournerPiece(etat, index) {
   if (!e) return null
   const avant = e.enCours[index]
   e.enCours[index] = { ...avant, id: pieceSuivante(avant.id) }
+  if (avant.couleurs) {
+    e.enCours[index].couleurs = couleursTournees(avant)
+    // La couleur d'une pièce mélangée est celle de sa première case.
+    e.enCours[index].couleur = e.enCours[index].couleurs[0]
+  }
   // La case surprise tourne avec la pièce : un quart de tour horaire envoie (l, c) en
   // (c, hauteur - 1 - l), comme le catalogue (pieces.js).
   if (avant.surprise) e.enCours[index].surprise = { ligne: avant.surprise.col, col: piece(avant.id).hauteur - 1 - avant.surprise.ligne }
@@ -343,14 +367,16 @@ export function annulerCoup(etat) {
   if (!e) return null
   const avant = etat.annulation
   e.grille = avant.grille.map((r) => [...r])
-  e.enCours = avant.enCours.map((x) => x && { ...x })
-  e.suivantes = avant.suivantes.map((x) => ({ ...x }))
+  e.enCours = avant.enCours.map((x) => x && copiePiece(x))
+  e.suivantes = avant.suivantes.map(copiePiece)
   e.score = avant.score
   e.coups = avant.coups
   e.tours = avant.tours
   e.serie = avant.serie
   e.hasard = avant.hasard
   e.hasardGains = avant.hasardGains
+  e.hasardCouleurs = avant.hasardCouleurs
+  e.couleurs = { ...avant.couleurs }
   e.defi = { ...avant.defi }
   e.palier = avant.palier
   e.surprise = avant.surprise && { ...avant.surprise }
@@ -479,7 +505,8 @@ function appliquerGains(e, gains) {
 // 2 (BS42) : la réserve de bonus et l'instantané d'annulation s'ajoutent à la partie.
 // 3 (BS43) : le défi, le palier, la case surprise (sur la grille et sur les pièces), les choix
 // en attente, le hasard des gains et les bonus rapportés par la dernière pose (annulation).
-export const SCHEMA_PARTIE = 3
+// 4 (BS44) : l'entrée des couleurs en cours, son hasard, et les couleurs par case d'une pièce mélangée.
+export const SCHEMA_PARTIE = 4
 
 // L'état d'une partie en données simples (JSON), sans `reglages` (il contient une
 // fonction), `dernierCoup` ni `dernierBonus` (utiles au seul affichage du dernier geste).
@@ -498,7 +525,7 @@ export function exporterPartie(etat) {
 
 // Les données qu'un instantané et une partie ont en commun : tout, hors niveau et réserve.
 function figerInstantane(x) {
-  const figer = (p) => p && { id: p.id, couleur: p.couleur, ...(p.surprise && { surprise: { ligne: p.surprise.ligne, col: p.surprise.col } }) }
+  const figer = (p) => p && { id: p.id, couleur: p.couleur, ...(p.couleurs && { couleurs: [...p.couleurs] }), ...(p.surprise && { surprise: { ligne: p.surprise.ligne, col: p.surprise.col } }) }
   return {
     grille: x.grille.map((r) => [...r]),
     enCours: x.enCours.map(figer),
@@ -509,6 +536,8 @@ function figerInstantane(x) {
     serie: x.serie,
     hasard: x.hasard,
     hasardGains: x.hasardGains,
+    hasardCouleurs: x.hasardCouleurs,
+    couleurs: { ...x.couleurs },
     defi: { ...x.defi },
     palier: x.palier,
     surprise: x.surprise && { ...x.surprise },
@@ -559,10 +588,16 @@ function lireInstantane(d, reglages) {
   // Une pièce { id, couleur } et, si elle porte la case surprise, sa place dans la pièce.
   const lirePiece = (x) => {
     if (!x || typeof x !== 'object' || !piece(x.id) || !couleur(x.couleur)) return undefined
-    if (x.surprise === undefined) return { id: x.id, couleur: x.couleur }
+    const lue = { id: x.id, couleur: x.couleur }
+    if (x.couleurs !== undefined) {
+      const cases = piece(x.id).cases.length
+      if (!Array.isArray(x.couleurs) || x.couleurs.length !== cases || !x.couleurs.every(couleur) || x.couleurs[0] !== x.couleur) return undefined
+      lue.couleurs = [...x.couleurs]
+    }
+    if (x.surprise === undefined) return lue
     const s = x.surprise
     if (!s || typeof s !== 'object' || !piece(x.id).cases.some((c) => c.ligne === s.ligne && c.col === s.col)) return undefined
-    return { id: x.id, couleur: x.couleur, surprise: { ligne: s.ligne, col: s.col } }
+    return { ...lue, surprise: { ligne: s.ligne, col: s.col } }
   }
   if (!Array.isArray(d.enCours) || d.enCours.length !== piecesParTour) return null
   if (!Array.isArray(d.suivantes) || d.suivantes.length !== piecesParTour) return null
@@ -574,6 +609,8 @@ function lireInstantane(d, reglages) {
 
   const gains = lireGains(d, reglages, entier)
   if (!gains) return null
+  const couleurs = lireCouleurs(d.couleurs)
+  if (!couleurs || !entier(d.hasardCouleurs, 0, 0xffffffff)) return null
   // Une seule case surprise à la fois, sur la grille ou sur une pièce, et posée sur une case occupée.
   const portees = [...enCours, ...suivantes].filter((x) => x && x.surprise).length
   if (portees + (gains.surprise ? 1 : 0) > 1) return null
@@ -589,6 +626,8 @@ function lireInstantane(d, reglages) {
     tours: d.tours,
     serie: d.serie,
     hasard: d.hasard,
+    hasardCouleurs: d.hasardCouleurs,
+    couleurs,
     ...gains,
   }
 }
@@ -668,7 +707,8 @@ function tirer(etat, nombre) {
   if (!Array.isArray(ids) || ids.length !== nombre || !ids.every((id) => piece(id))) {
     throw new Error(`tirage invalide : ${JSON.stringify(ids)}`)
   }
-  return marquerSurprise(etat, ids.map((id) => ({ id, couleur: reglages.couleurPiece })))
+  const couleurs = couleursDePieces(etat.couleurs, ids.map((id) => piece(id).cases.length), () => aleatoire(etat, 'hasardCouleurs'))
+  return marquerSurprise(etat, ids.map((id, i) => ({ id, ...couleurs[i] })))
 }
 
 // Une pièce tirée peut porter la case surprise (chance reglages.gains.surprise.frequence),
@@ -703,8 +743,25 @@ function cloner(etat) {
   return {
     ...etat,
     grille: etat.grille.map((r) => [...r]),
-    enCours: etat.enCours.map((x) => x && { ...x }),
-    suivantes: etat.suivantes.map((x) => ({ ...x })),
+    enCours: etat.enCours.map((x) => x && copiePiece(x)),
+    suivantes: etat.suivantes.map(copiePiece),
     reserve: { ...etat.reserve },
+    couleurs: { ...etat.couleurs },
   }
+}
+
+// Une pièce en main copiée, avec ses couleurs par case et sa surprise.
+function copiePiece(x) {
+  return { ...x, ...(x.couleurs && { couleurs: [...x.couleurs] }), ...(x.surprise && { surprise: { ...x.surprise } }) }
+}
+
+// Les couleurs par case d'une pièce après un quart de tour : chaque case garde sa couleur en
+// tournant avec la pièce (même rotation que le catalogue, pieces.js).
+function couleursTournees(avant) {
+  const p = piece(avant.id)
+  const suivante = piece(pieceSuivante(avant.id))
+  return suivante.cases.map((n) => {
+    const i = p.cases.findIndex((c) => c.col === n.ligne && p.hauteur - 1 - c.ligne === n.col)
+    return avant.couleurs[i]
+  })
 }

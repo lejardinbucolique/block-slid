@@ -510,7 +510,7 @@ test('les causes de gain sont les six de BS43', () => {
 // --- La partie exportée -----------------------------------------------------------
 
 test('la partie exportée porte le défi, le palier, la surprise, les choix et le hasard des gains', () => {
-  assert.equal(SCHEMA_PARTIE, 3)
+  assert.equal(SCHEMA_PARTIE, 4)
   const e = partie({
     surprise: { ligne: 9, col: 0, reste: 5 },
     rangees: enBas('#.........'),
@@ -557,7 +557,7 @@ test('import : les données de gains incohérentes sont refusées (null)', () =>
   const copie = () => JSON.parse(JSON.stringify(base))
   assert.ok(importerPartie(copie()))
   const cas = {
-    'schéma 2': (d) => { d.schema = 2 },
+    'schéma 3': (d) => { d.schema = 3 },
     'défi manquant': (d) => { delete d.defi },
     'défi sans points': (d) => { d.defi.points = 0 },
     'défi commencé dans le futur': (d) => { d.defi.scoreDebut = d.score + 1 },

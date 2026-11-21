@@ -24,8 +24,8 @@ export const REGLAGES = Object.freeze({
   // Gains de bonus (BS43) : conditions, défi, palier, cases surprises, voir gains.js.
   gains: GAINS,
 
-  // Couleur que reçoit une pièce tirée, transmise telle quelle à ses cases posées.
-  // Les modes de couleur viendront en BS44.
+  // Couleur des pièces données à la main aux essais (depuisTexte). Les pièces tirées en
+  // partie prennent celle de l'entrée en cours de la liste des couleurs (couleurs.js, BS44).
   couleurPiece: 'uni',
 
   // Tirage garanti (BS41, tirage-garanti.js) : les pièces d'un tour, puis celles de

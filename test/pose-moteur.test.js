@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   REGLAGES,
+  LISTE_COULEURS,
   piece,
   LIGNES_MAX_PAR_COUP,
   COLONNES_MAX_PAR_COUP,
@@ -48,7 +49,7 @@ test('une partie neuve : grille 10x10 vide, trois pièces en main et trois en ap
   assert.ok(e.grille.every((r) => r.length === 10 && r.every((v) => v === null)))
   assert.equal(e.enCours.length, 3)
   assert.equal(e.suivantes.length, 3)
-  assert.ok([...e.enCours, ...e.suivantes].every((x) => piece(x.id) && x.couleur === REGLAGES.couleurPiece))
+  assert.ok([...e.enCours, ...e.suivantes].every((x) => piece(x.id) && x.couleur === LISTE_COULEURS[0].couleur))
   assert.deepEqual([e.score, e.coups, e.tours, e.serie, e.niveau], [0, 0, 0, 0, 4])
 })
 

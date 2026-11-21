@@ -106,6 +106,8 @@ export function resumeStyles(meilleur, jeu = JEU_PAR_DEFAUT) {
   const base = nouveaux.length === 0
     ? 'Aucun style à débloquer pour l\'instant.'
     : `Styles débloqués : ${debloques.length} sur ${nouveaux.length}.`
-  if (!prochain) return `${base} Le style change à chaque figure réussie.`
+  // Une fois tout débloqué : block-slid change de style à chaque figure réussie ; block-pose n'a
+  // pas de figures, le joueur choisit son style dans les propriétés (proposition de BS44).
+  if (!prochain) return `${base} ${jeu === JEU_BLOCK_POSE ? 'Le style se choisit dans les propriétés.' : 'Le style change à chaque figure réussie.'}`
   return `${base} Prochain : ${prochain.nom}, à ${prochain.palier} points de meilleur score.`
 }
