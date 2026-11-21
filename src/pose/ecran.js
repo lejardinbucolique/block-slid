@@ -290,6 +290,7 @@ export async function demarrerJeu() {
   let minuteurFin = null
   let minuteurChoix = null
   let minuteurMessage = null
+  let minuteurDecor = null
   let cellule = 0
   let signatures = { main: [], apercu: [] }
   let premierAffichage = true
@@ -1108,11 +1109,31 @@ export async function demarrerJeu() {
   }
 
   choixStyle.addEventListener('change', () => {
+    const avant = style
     style = styleAutorise(choixStyle.value, meilleur, JEU_BLOCK_POSE)
     retenirStylePose(style)
-    racine.dataset.style = style
+    changerDecor(avant, style)
     majCouleurNavigateur()
   })
+
+  // Le décor suit la texture (BS47) : changer de style change les variables du décor (pose.css), qui
+  // se fondent en un demi-seconde. `decor-change` donne aux éléments leur transition et lance les
+  // fondus du motif de la page, `data-avant` garde le motif du style quitté pour qu'il s'efface.
+  // L'ordre compte : la classe doit être en place, et son style calculé, avant que les variables changent.
+  function changerDecor(avant, apres) {
+    if (avant === apres) return
+    clearTimeout(minuteurDecor)
+    racine.classList.remove('decor-change')
+    void racine.offsetWidth
+    racine.classList.add('decor-change')
+    void racine.offsetWidth
+    racine.dataset.avant = avant
+    racine.dataset.style = apres
+    minuteurDecor = setTimeout(() => {
+      racine.classList.remove('decor-change')
+      delete racine.dataset.avant
+    }, 500)
+  }
 
   function ouvrirReglages() {
     if (!fin.hidden || !choix.hidden) return

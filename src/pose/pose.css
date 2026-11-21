@@ -28,6 +28,21 @@
   --pose-bouton: #fbf7f0;        /* les boutons de bonus */
   --pose-bouton-bord: #b9ae9d;
   --pose-ombre-pose: rgba(0, 0, 0, .28);
+  --pose-voile: rgba(0, 0, 0, .12);  /* un creux sur le fond : barre du défi, bouton enfoncé */
+  --pose-alerte: #b3261e;        /* l'aide qui prévient */
+  --pose-gain: #1f7a38;          /* le « + » d'un bonus gagné */
+  --pose-badge: #4a4552;         /* la pastille du nombre de bonus */
+  --pose-cadre-ombre: 0 3px 0 rgba(0, 0, 0, .18);
+  /* Le liseré des pièces (BS47) : un trait posé autour de chaque case de pièce, clair sur un décor
+     sombre, sombre sur un décor clair, pour qu'une pièce de n'importe quelle couleur se lise.
+     Sans liseré (Uni) : transparent, d'épaisseur nulle. */
+  --pose-liseret: transparent;
+  --pose-liseret-l: 0px;
+  /* Les motifs du décor (BS47) : images posées sous la couleur du cadre, de la grille et des cases
+     libres ; `none` : unis. Le fond de la page a les siens, sur #pose::before. */
+  --pose-motif-cadre: none;
+  --pose-motif-grille: none;
+  --pose-motif-case: none;
 
   /* Ce que lisent les textures de style.css : la case en pixels (--cell, posée par ecran.js ; plus
      petite dans les rangées de pièces, voir plus bas) et le nombre de cases d'une ligne. */
@@ -51,6 +66,19 @@
 
 #pose[hidden],
 #pose [hidden] { display: none; }
+
+/* Le motif du fond de la page (BS47) : une couche sous tout le reste, dessinée par style plus bas.
+   ::after n'existe que pendant un changement de style : elle garde le motif du style quitté, qui
+   s'efface pendant que celui du nouveau apparaît (voir « Changement de décor »). */
+#pose::before,
+#pose::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+#pose:not([data-avant])::after { display: none; }
 
 /* --- En-tête : record, score, réglages, défi ---------------------------------------- */
 
@@ -87,7 +115,7 @@
   border-radius: 50%;
 }
 #pose-reglages-ouvrir svg { width: 100%; height: 100%; fill: var(--pose-texte); opacity: .75; }
-#pose-reglages-ouvrir:active { background: rgba(0, 0, 0, .1); }
+#pose-reglages-ouvrir:active { background: var(--pose-voile); }
 
 #pose-score-bloc { grid-area: score; position: relative; text-align: center; }
 #pose-score {
@@ -132,7 +160,7 @@
   position: relative;
   height: 1.15rem;
   overflow: hidden;
-  background: rgba(0, 0, 0, .12);
+  background: var(--pose-voile);
   border-radius: 999px;
 }
 #pose-defi-jauge {
@@ -170,15 +198,15 @@
 #pose-plateau {
   position: relative;
   padding: 5px; /* CADRE_PX de ecran.js */
-  background: var(--pose-cadre);
+  background: var(--pose-motif-cadre), var(--pose-cadre);
   border-radius: 10px;
-  box-shadow: 0 3px 0 rgba(0, 0, 0, .18);
+  box-shadow: var(--pose-cadre-ombre);
 }
 
 #pose-grille {
   display: grid;
   grid-template: repeat(10, var(--cell)) / repeat(10, var(--cell));
-  background: var(--pose-grille-fond);
+  background: var(--pose-motif-grille), var(--pose-grille-fond);
   border-radius: 5px;
   touch-action: none;
 }
@@ -191,7 +219,7 @@
 #pose .pose-case {
   position: relative;
   margin: 1px;
-  background: var(--pose-case-vide);
+  background: var(--pose-motif-case), var(--pose-case-vide);
   border-radius: 4px;
   transition: transform .14s ease-out, box-shadow .14s ease-out, background-color .14s;
 }
@@ -215,6 +243,7 @@
     inset 2px 2px 0 rgba(255, 255, 255, .45),
     inset -2px -3px 0 rgba(0, 0, 0, .3),
     0 1px 0 rgba(0, 0, 0, .35);
+  outline: var(--pose-liseret-l) solid var(--pose-liseret); /* le liseré du décor (BS47) */
 }
 #pose[data-style="uni"] .pose-bloc > i {
   background: var(--couleur);
@@ -265,7 +294,7 @@
 /* ... et chaque ligne ou colonne qui serait complétée s'élève un peu au-dessus de la surface. */
 #pose .pose-case.eleve {
   z-index: 2;
-  background: var(--pose-case-vide-haut);
+  background: var(--pose-motif-case), var(--pose-case-vide-haut);
   transform: translateY(calc(var(--cell) * -.09)) scale(1.04);
   box-shadow: 0 calc(var(--cell) * .12) calc(var(--cell) * .12) var(--pose-ombre-pose);
 }
@@ -325,7 +354,7 @@
   25% { transform: scale(1.7) rotate(90deg); opacity: 1; }
   100% { transform: translateY(calc(var(--cell) * -1.2)) scale(1) rotate(200deg); opacity: 0; }
 }
-#pose .pose-soupir { color: #6f6a73; font-size: calc(var(--cell) * .7); text-shadow: 0 1px 0 #fff; animation: pose-soupir .9s ease-out forwards; }
+#pose .pose-soupir { color: var(--pose-texte-doux); font-size: calc(var(--cell) * .7); text-shadow: 0 0 3px var(--pose-fond), 0 1px 0 var(--pose-fond); animation: pose-soupir .9s ease-out forwards; }
 @keyframes pose-soupir { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: translateY(calc(var(--cell) * .5)) scale(.5); } }
 #pose .pose-apparait { color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .8); animation: pose-apparait .7s ease-out forwards; }
 @keyframes pose-apparait { 0% { opacity: 0; transform: scale(2.2); } 40% { opacity: 1; } 100% { opacity: 0; transform: scale(1); } }
@@ -381,7 +410,7 @@
   line-height: 1.4rem;
   text-align: center;
   color: #fff;
-  background: #4a4552;
+  background: var(--pose-badge);
   border: 2px solid var(--pose-fond);
   border-radius: 999px;
   font-variant-numeric: tabular-nums;
@@ -398,8 +427,8 @@
   translate: -50% 0;
   font-size: 1rem;
   font-weight: 900;
-  color: #1f7a38;
-  text-shadow: 0 0 3px #fff, 0 0 3px #fff;
+  color: var(--pose-gain);
+  text-shadow: 0 0 3px var(--pose-fond), 0 0 3px var(--pose-fond);
   white-space: nowrap;
   pointer-events: none;
   animation: pose-plus .8s ease-out forwards;
@@ -416,7 +445,7 @@
   text-align: center;
   color: var(--pose-accent);
 }
-#pose-aide.alerte { color: #b3261e; }
+#pose-aide.alerte { color: var(--pose-alerte); }
 
 /* --- Pièces à poser, aperçu des suivantes -------------------------------------------------- */
 
@@ -655,8 +684,327 @@
   to { transform: translateY(calc(var(--l, 1) * var(--ch, 40px) + 60%)) skewY(-25deg); opacity: .6; }
 }
 
+/* --- Décors : le plateau suit la texture des blocs (BS47) ------------------------------------------
+   Un décor par style, qui couvre le fond de la page (#pose::before), le cadre, la grille et les cases
+   libres. Chaque style n'écrit que ses variables (voir la tête de #pose) et ses motifs, dessinés en
+   dégradés ou en petits SVG statiques : aucun filtre, aucune image lourde. Uni garde les valeurs de
+   #pose. Les motifs de la page vont par paire de sélecteurs : ::before pour le style en cours,
+   ::after pour le style quitté, qui s'efface pendant un changement (data-avant, voir plus bas).
+
+   La lisibilité des pièces : un décor clair prend un liseré sombre, un décor sombre un liseré clair
+   (--pose-liseret), pour que les vingt couleurs de la palette se lisent sur ses cases libres comme
+   sur son fond, y compris les cinq très sombres (Anthracite, Bleu marine, Bordeaux, Prune, Vert sapin)
+   et les trois très claires (Menthe, Citron vert, Jaune). Les valeurs sont éprouvées par
+   test/pose-decors.test.js. */
+
+/* Laine : un fond rose en tricot (mailles en V), une grille d'un rose plus soutenu. */
+#pose[data-style="laine"] {
+  --pose-fond: #f5b9ca;
+  --pose-texte: #55203a;
+  --pose-texte-doux: #86495f;
+  --pose-accent: #a8205b;
+  --pose-cadre: #b94d72;
+  --pose-grille-fond: #d97a98;
+  --pose-case-vide: #eea0b8;
+  --pose-case-vide-haut: #f6b8cb;
+  --pose-bouton: #fde9ef;
+  --pose-bouton-bord: #cf819a;
+  --pose-ombre-pose: rgba(90, 15, 45, .35);
+  --pose-voile: rgba(90, 15, 45, .14);
+  --pose-liseret: rgba(80, 12, 42, .55);
+  --pose-liseret-l: 1px;
+  --pose-motif-cadre: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1.6 1.6L6 6.4L10.4 1.6' fill='none' stroke='%237a1840' stroke-opacity='.25' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round' transform='translate(0 .6)'/%3E%3Cpath d='M1.6 1.6L6 6.4L10.4 1.6' fill='none' stroke='%23fff' stroke-opacity='.3' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") 0 0 / 9px 6px;
+  --pose-motif-grille: var(--pose-motif-cadre);
+  --pose-motif-case: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1.6 1.6L6 6.4L10.4 1.6' fill='none' stroke='%237a1840' stroke-opacity='.16' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round' transform='translate(0 .6)'/%3E%3Cpath d='M1.6 1.6L6 6.4L10.4 1.6' fill='none' stroke='%23fff' stroke-opacity='.3' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") 0 0 / 7px 4.7px;
+}
+#pose[data-style="laine"]::before,
+#pose[data-avant="laine"]::after {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1.6 1.6L6 6.4L10.4 1.6' fill='none' stroke='%237a1840' stroke-opacity='.2' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round' transform='translate(0 .6)'/%3E%3Cpath d='M1.6 1.6L6 6.4L10.4 1.6' fill='none' stroke='%23fff' stroke-opacity='.42' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") 0 0 / 12px 8px;
+}
+
+/* Béton : une dalle grise, ses joints et ses gravillons. */
+#pose[data-style="beton"] {
+  --pose-fond: #b4b3af;
+  --pose-texte: #262626;
+  --pose-texte-doux: #4e4c49;
+  --pose-accent: #9a4400;
+  --pose-cadre: #6e6d6a;
+  --pose-grille-fond: #8b8a86;
+  --pose-case-vide: #c4c3bf;
+  --pose-case-vide-haut: #d3d2ce;
+  --pose-bouton: #e3e2de;
+  --pose-bouton-bord: #85847f;
+  --pose-ombre-pose: rgba(0, 0, 0, .38);
+  --pose-liseret: rgba(0, 0, 0, .55);
+  --pose-liseret-l: 1px;
+  --pose-motif-cadre: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Cg fill='%23000' fill-opacity='.2'%3E%3Ccircle cx='3' cy='5' r='.8'/%3E%3Ccircle cx='15' cy='3' r='.6'/%3E%3Ccircle cx='9' cy='13' r='.9'/%3E%3Ccircle cx='20' cy='11' r='.7'/%3E%3Ccircle cx='5' cy='20' r='.6'/%3E%3Ccircle cx='17' cy='21' r='.8'/%3E%3C/g%3E%3Cg fill='%23fff' fill-opacity='.22'%3E%3Ccircle cx='11' cy='6' r='.7'/%3E%3Ccircle cx='22' cy='17' r='.6'/%3E%3Ccircle cx='2' cy='13' r='.6'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 24px 24px;
+  --pose-motif-grille: var(--pose-motif-cadre);
+  --pose-motif-case: var(--pose-motif-cadre);
+}
+#pose[data-style="beton"]::before,
+#pose[data-avant="beton"]::after {
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, .16) 0 2px, rgba(255, 255, 255, .22) 2px 3px, transparent 3px) 0 0 / 190px 100%,
+    linear-gradient(180deg, rgba(0, 0, 0, .16) 0 2px, rgba(255, 255, 255, .22) 2px 3px, transparent 3px) 0 0 / 100% 190px,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Cg fill='%23000' fill-opacity='.2'%3E%3Ccircle cx='6' cy='9' r='.9'/%3E%3Ccircle cx='23' cy='4' r='.7'/%3E%3Ccircle cx='41' cy='14' r='1'/%3E%3Ccircle cx='57' cy='7' r='.8'/%3E%3Ccircle cx='13' cy='29' r='.8'/%3E%3Ccircle cx='34' cy='33' r='.9'/%3E%3Ccircle cx='52' cy='39' r='.7'/%3E%3Ccircle cx='8' cy='51' r='1'/%3E%3Ccircle cx='27' cy='58' r='.8'/%3E%3Ccircle cx='47' cy='55' r='.9'/%3E%3C/g%3E%3Cg fill='%23fff' fill-opacity='.25'%3E%3Ccircle cx='15' cy='18' r='.8'/%3E%3Ccircle cx='48' cy='24' r='.7'/%3E%3Ccircle cx='30' cy='45' r='.8'/%3E%3Ccircle cx='60' cy='60' r='.7'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 64px 64px;
+}
+
+/* Bois : des planches claires, leurs joints et leurs veines. */
+#pose[data-style="bois"] {
+  --pose-fond: #c79a60;
+  --pose-texte: #2f1a08;
+  --pose-texte-doux: #5e3d1c;
+  --pose-accent: #6e2400;
+  --pose-cadre: #5e3a1b;
+  --pose-grille-fond: #7a4e26;
+  --pose-case-vide: #dcb881;
+  --pose-case-vide-haut: #e8c996;
+  --pose-bouton: #f3e1c0;
+  --pose-bouton-bord: #8a6234;
+  --pose-ombre-pose: rgba(40, 20, 0, .4);
+  --pose-voile: rgba(40, 20, 0, .16);
+  --pose-liseret: rgba(35, 15, 0, .6);
+  --pose-liseret-l: 1px;
+  --pose-motif-cadre: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='16' viewBox='0 0 160 32'%3E%3Cg fill='none' stroke='%23000' stroke-opacity='.3' stroke-width='1.2'%3E%3Cpath d='M0 6C30 3 60 9 90 6S140 3 160 6'/%3E%3Cpath d='M0 16C25 19 70 13 110 16S150 18 160 16'/%3E%3Cpath d='M0 26C35 23 65 29 100 26S145 24 160 26'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 80px 16px;
+  --pose-motif-grille: var(--pose-motif-cadre);
+  --pose-motif-case: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='16' viewBox='0 0 160 32'%3E%3Cg fill='none' stroke='%23603010' stroke-opacity='.2' stroke-width='1.2'%3E%3Cpath d='M0 6C30 3 60 9 90 6S140 3 160 6'/%3E%3Cpath d='M0 16C25 19 70 13 110 16S150 18 160 16'/%3E%3Cpath d='M0 26C35 23 65 29 100 26S145 24 160 26'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 80px 16px;
+}
+#pose[data-style="bois"]::before,
+#pose[data-avant="bois"]::after {
+  background:
+    repeating-linear-gradient(180deg, transparent 0 62px, rgba(40, 20, 0, .4) 62px 64px),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='64'%3E%3Cg fill='none' stroke='%23502800' stroke-opacity='.2' stroke-width='.9'%3E%3Cpath d='M0 10C30 6 60 14 90 9S140 6 160 10'/%3E%3Cpath d='M0 24C25 28 70 20 110 25S150 27 160 24'/%3E%3Cpath d='M0 38C40 34 70 42 105 37S145 35 160 38'/%3E%3Cpath d='M0 52C28 55 62 49 100 53S148 55 160 52'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 160px 64px,
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, .08) 0 64px, rgba(0, 0, 0, .06) 64px 128px);
+}
+
+/* Bonbon : des rayures pastel et du sucre glace, sous un cadre rose. */
+#pose[data-style="bonbon"] {
+  --pose-fond: #e3f4ef;
+  --pose-texte: #5a2a56;
+  --pose-texte-doux: #865082;
+  --pose-accent: #c4146a;
+  --pose-cadre: #ee86bd;
+  --pose-grille-fond: #f6b9d9;
+  --pose-case-vide: #fff3f9;
+  --pose-case-vide-haut: #ffffff;
+  --pose-bouton: #ffffff;
+  --pose-bouton-bord: #ee86bd;
+  --pose-ombre-pose: rgba(150, 40, 110, .3);
+  --pose-voile: rgba(150, 40, 110, .12);
+  --pose-liseret: rgba(100, 20, 90, .45);
+  --pose-liseret-l: 1px;
+  --pose-motif-cadre: repeating-linear-gradient(45deg, rgba(255, 255, 255, .45) 0 5px, transparent 5px 10px);
+  --pose-motif-grille: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .55) 0 1.5px, transparent 2px) 0 0 / 8px 8px;
+  --pose-motif-case: radial-gradient(circle at 50% 50%, rgba(238, 134, 189, .28) 0 1.3px, transparent 1.8px) 0 0 / 8px 8px;
+}
+#pose[data-style="bonbon"]::before,
+#pose[data-avant="bonbon"]::after {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .8) 0 3px, transparent 3.5px) 0 0 / 28px 28px,
+    repeating-linear-gradient(45deg, #d6f0ea 0 22px, #ece3fb 22px 44px);
+}
+
+/* Papier : une feuille à carreaux, sous un cadre de carton. */
+#pose[data-style="papier"] {
+  --pose-fond: #f6f1e4;
+  --pose-texte: #2b2a38;
+  --pose-texte-doux: #5c5a68;
+  --pose-accent: #1f4fa8;
+  --pose-cadre: #b58a55;
+  --pose-grille-fond: #cdbf9f;
+  --pose-case-vide: #ede5cf;
+  --pose-case-vide-haut: #faf5e8;
+  --pose-bouton: #fffdf6;
+  --pose-bouton-bord: #b9a98a;
+  --pose-ombre-pose: rgba(60, 40, 10, .3);
+  --pose-voile: rgba(60, 40, 10, .1);
+  --pose-liseret: rgba(50, 35, 10, .55);
+  --pose-liseret-l: 1px;
+  --pose-motif-cadre: repeating-linear-gradient(90deg, rgba(0, 0, 0, .09) 0 2px, rgba(255, 255, 255, .1) 2px 5px);
+  --pose-motif-grille: linear-gradient(rgba(60, 40, 10, .1) 1px, transparent 1px) 0 0 / 6px 6px;
+  --pose-motif-case: linear-gradient(180deg, rgba(255, 255, 255, .5), transparent 40%);
+}
+#pose[data-style="papier"]::before,
+#pose[data-avant="papier"]::after {
+  background:
+    linear-gradient(90deg, transparent 34px, rgba(210, 70, 70, .35) 34px 36px, transparent 36px),
+    linear-gradient(rgba(70, 110, 190, .22) 1px, transparent 1px) 0 0 / 18px 18px,
+    linear-gradient(90deg, rgba(70, 110, 190, .22) 1px, transparent 1px) 0 0 / 18px 18px;
+}
+
+/* Métal : une plaque brossée, rivetée. */
+#pose[data-style="metal"] {
+  --pose-fond: #8a9199;
+  --pose-texte: #12161a;
+  --pose-texte-doux: #2f363c;
+  --pose-accent: #5c1f00;
+  --pose-cadre: #3f454b;
+  --pose-grille-fond: #5a6168;
+  --pose-case-vide: #a4abb2;
+  --pose-case-vide-haut: #b9c0c6;
+  --pose-bouton: #d7dce0;
+  --pose-bouton-bord: #5f666c;
+  --pose-ombre-pose: rgba(0, 0, 0, .42);
+  --pose-liseret: rgba(0, 0, 0, .6);
+  --pose-liseret-l: 1px;
+  --pose-motif-cadre: repeating-linear-gradient(90deg, rgba(255, 255, 255, .08) 0 1px, rgba(0, 0, 0, .1) 1px 2px, transparent 2px 4px);
+  --pose-motif-grille: var(--pose-motif-cadre);
+  --pose-motif-case: repeating-linear-gradient(90deg, rgba(255, 255, 255, .14) 0 1px, rgba(0, 0, 0, .06) 1px 2px, transparent 2px 4px), linear-gradient(120deg, rgba(255, 255, 255, .22), transparent 45%);
+}
+#pose[data-style="metal"]::before,
+#pose[data-avant="metal"]::after {
+  background:
+    radial-gradient(circle at 14px 14px, #e8edf0 0 1.5px, rgba(0, 0, 0, .45) 2.5px, transparent 3.5px) 0 0 / 120px 120px,
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .07) 0 1px, rgba(0, 0, 0, .06) 1px 2px, transparent 2px 4px),
+    linear-gradient(105deg, rgba(255, 255, 255, .2), transparent 35%, rgba(0, 0, 0, .14) 70%, rgba(255, 255, 255, .12));
+}
+
+/* Verre : un verre dépoli, clair, et de la lumière diffuse. */
+#pose[data-style="verre"] {
+  --pose-fond: #cfe4ef;
+  --pose-texte: #12303f;
+  --pose-texte-doux: #3d5f72;
+  --pose-accent: #0b5f87;
+  --pose-cadre: #7ea6bc;
+  --pose-grille-fond: #a3c3d4;
+  --pose-case-vide: #e6f3f9;
+  --pose-case-vide-haut: #f6fbfe;
+  --pose-bouton: #f4fafd;
+  --pose-bouton-bord: #8fb3c6;
+  --pose-ombre-pose: rgba(10, 50, 80, .3);
+  --pose-voile: rgba(10, 50, 80, .12);
+  --pose-liseret: rgba(8, 45, 70, .5);
+  --pose-liseret-l: 1px;
+  --pose-motif-cadre: linear-gradient(135deg, rgba(255, 255, 255, .55), transparent 45%, rgba(255, 255, 255, .25));
+  --pose-motif-grille: linear-gradient(135deg, rgba(255, 255, 255, .3), transparent 60%);
+  --pose-motif-case: linear-gradient(135deg, rgba(255, 255, 255, .6), rgba(255, 255, 255, 0) 55%);
+}
+#pose[data-style="verre"]::before,
+#pose[data-avant="verre"]::after {
+  background:
+    radial-gradient(ellipse 60% 35% at 15% 12%, rgba(255, 255, 255, .75), transparent 70%),
+    radial-gradient(ellipse 70% 40% at 90% 85%, rgba(120, 185, 225, .45), transparent 70%),
+    radial-gradient(ellipse 40% 25% at 70% 30%, rgba(255, 255, 255, .35), transparent 70%),
+    linear-gradient(160deg, #deeef6, #b9d6e5);
+}
+
+/* Marbre : une dalle claire, veinée de gris. */
+#pose[data-style="marbre"] {
+  --pose-fond: #e9e6e0;
+  --pose-texte: #25232b;
+  --pose-texte-doux: #5a5760;
+  --pose-accent: #85601a;
+  --pose-cadre: #6a6a72;
+  --pose-grille-fond: #a9a7a2;
+  --pose-case-vide: #dcd8d0;
+  --pose-case-vide-haut: #ece9e2;
+  --pose-bouton: #f7f5f0;
+  --pose-bouton-bord: #a09b92;
+  --pose-ombre-pose: rgba(30, 28, 36, .34);
+  --pose-liseret: rgba(30, 28, 36, .55);
+  --pose-liseret-l: 1px;
+  --pose-motif-cadre: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='30' viewBox='0 0 60 30' preserveAspectRatio='none'%3E%3Cpath d='M0 8C14 12 22 2 36 10S52 14 60 6' fill='none' stroke='%23fff' stroke-opacity='.35' stroke-width='1.2'/%3E%3Cpath d='M0 24C16 20 26 28 40 22S54 20 60 26' fill='none' stroke='%23fff' stroke-opacity='.25' stroke-width='.9'/%3E%3C/svg%3E") 0 0 / 60px 30px;
+  --pose-motif-grille: var(--pose-motif-cadre);
+  --pose-motif-case: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40' preserveAspectRatio='none'%3E%3Cpath d='M-2 30C8 26 14 34 22 24S34 14 42 8' fill='none' stroke='%23564f60' stroke-opacity='.3' stroke-width='.9'/%3E%3Cpath d='M22 24C24 30 28 32 30 40' fill='none' stroke='%23564f60' stroke-opacity='.2' stroke-width='.6'/%3E%3C/svg%3E") 0 0 / 100% 100%;
+}
+#pose[data-style="marbre"]::before,
+#pose[data-avant="marbre"]::after {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 600' preserveAspectRatio='xMidYMid slice'%3E%3Cg fill='none' stroke-linecap='round'%3E%3Cpath d='M-10 120C60 150 90 90 150 210S260 250 320 330' stroke='%23fff' stroke-opacity='.7' stroke-width='6'/%3E%3Cpath d='M-10 120C60 150 90 90 150 210S260 250 320 330' stroke='%23585166' stroke-opacity='.4' stroke-width='1.8'/%3E%3Cpath d='M150 210C170 260 140 300 175 360S190 430 170 480' stroke='%23585166' stroke-opacity='.3' stroke-width='1'/%3E%3Cpath d='M310 20C250 80 270 150 200 190' stroke='%23585166' stroke-opacity='.28' stroke-width='1.2'/%3E%3Cpath d='M40 420C100 400 130 470 210 480S280 540 310 590' stroke='%23fff' stroke-opacity='.6' stroke-width='5'/%3E%3Cpath d='M40 420C100 400 130 470 210 480S280 540 310 590' stroke='%23585166' stroke-opacity='.32' stroke-width='1.4'/%3E%3Cpath d='M-10 330C30 350 50 310 90 340' stroke='%23585166' stroke-opacity='.22' stroke-width='.9'/%3E%3C/g%3E%3C/svg%3E") center / cover no-repeat,
+    linear-gradient(160deg, rgba(255, 255, 255, .5), transparent 50%, rgba(0, 0, 0, .05));
+}
+
+/* Néon : une nuit violette, des lueurs magenta et cyan, un quadrillage. */
+#pose[data-style="neon"] {
+  --pose-fond: #0b0920;
+  --pose-texte: #f4ecff;
+  --pose-texte-doux: #b5a7e6;
+  --pose-accent: #ff58d6;
+  --pose-cadre: #2a1a6e;
+  --pose-grille-fond: #1d1556;
+  --pose-case-vide: #15103f;
+  --pose-case-vide-haut: #261d68;
+  --pose-bouton: #1c1650;
+  --pose-bouton-bord: #7b5cff;
+  --pose-ombre-pose: rgba(0, 0, 0, .6);
+  --pose-voile: rgba(255, 255, 255, .14);
+  --pose-alerte: #ff8a80;
+  --pose-gain: #7be495;
+  --pose-badge: #6a4de0;
+  --pose-cadre-ombre: 0 0 0 1px #ff58d6, 0 0 12px 2px rgba(255, 88, 214, .55), 0 0 28px rgba(0, 230, 255, .3);
+  --pose-liseret: rgba(255, 255, 255, .62);
+  --pose-liseret-l: 1px;
+  --pose-motif-cadre: repeating-linear-gradient(90deg, rgba(255, 255, 255, .08) 0 1px, transparent 1px 6px);
+  --pose-motif-grille: linear-gradient(180deg, rgba(255, 88, 214, .22), transparent 40%, rgba(0, 230, 255, .2));
+  --pose-motif-case: linear-gradient(180deg, rgba(140, 110, 255, .2), transparent 65%);
+}
+#pose[data-style="neon"]::before,
+#pose[data-avant="neon"]::after {
+  background:
+    radial-gradient(ellipse 70% 40% at 12% 8%, rgba(255, 40, 200, .32), transparent 70%),
+    radial-gradient(ellipse 70% 45% at 92% 92%, rgba(0, 220, 255, .28), transparent 70%),
+    linear-gradient(rgba(120, 90, 255, .2) 1px, transparent 1px) 0 0 / 30px 30px,
+    linear-gradient(90deg, rgba(120, 90, 255, .2) 1px, transparent 1px) 0 0 / 30px 30px;
+}
+
+/* Gemme : un écrin sombre, des facettes, un filet d'or. */
+#pose[data-style="gemme"] {
+  --pose-fond: #170f26;
+  --pose-texte: #f5ecff;
+  --pose-texte-doux: #c2b2e6;
+  --pose-accent: #ffcf6b;
+  --pose-cadre: #5a3a8e;
+  --pose-grille-fond: #2a1d47;
+  --pose-case-vide: #35265a;
+  --pose-case-vide-haut: #4a387f;
+  --pose-bouton: #2e2150;
+  --pose-bouton-bord: #a583ee;
+  --pose-ombre-pose: rgba(0, 0, 0, .55);
+  --pose-voile: rgba(255, 255, 255, .15);
+  --pose-alerte: #ff8a80;
+  --pose-gain: #7be495;
+  --pose-badge: #7a56c8;
+  --pose-cadre-ombre: 0 0 0 1px rgba(255, 207, 107, .8), 0 3px 8px rgba(0, 0, 0, .5);
+  --pose-liseret: rgba(255, 255, 255, .6);
+  --pose-liseret-l: 1px;
+  --pose-motif-cadre: linear-gradient(135deg, rgba(255, 215, 130, .5), transparent 35%, rgba(255, 215, 130, .25));
+  --pose-motif-grille: linear-gradient(135deg, rgba(255, 255, 255, .08) 0 50%, transparent 50%) 0 0 / 40px 40px;
+  --pose-motif-case: linear-gradient(135deg, rgba(255, 255, 255, .14) 0 50%, transparent 50%), linear-gradient(315deg, rgba(0, 0, 0, .2) 0 50%, transparent 50%);
+}
+#pose[data-style="gemme"]::before,
+#pose[data-avant="gemme"]::after {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cg%3E%3Cpolygon points='0,0 80,0 0,80' fill='%23fff' fill-opacity='.05'/%3E%3Cpolygon points='80,0 160,0 160,80' fill='%23b36bff' fill-opacity='.1'/%3E%3Cpolygon points='80,0 160,80 80,80' fill='%23000' fill-opacity='.14'/%3E%3Cpolygon points='0,80 80,80 0,160' fill='%23b36bff' fill-opacity='.08'/%3E%3Cpolygon points='80,80 160,80 80,160' fill='%23fff' fill-opacity='.06'/%3E%3Cpolygon points='80,160 160,80 160,160' fill='%23000' fill-opacity='.16'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 160px 160px,
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(179, 107, 255, .25), transparent 70%);
+}
+
+/* --- Changement de décor ------------------------------------------------------------------------------
+   Quand on change de texture, ecran.js pose `decor-change` (un demi-seconde) et garde le style quitté
+   dans data-avant : les couleurs passent de l'une à l'autre, le motif de la page s'efface pendant que
+   celui du nouveau style apparaît, sans saut. Le motif du cadre et des cases est une image : il
+   change d'un coup, sous des couleurs qui, elles, se fondent. */
+
+#pose.decor-change,
+#pose.decor-change #pose-plateau,
+#pose.decor-change #pose-grille,
+#pose.decor-change #pose-haut,
+#pose.decor-change #pose-haut *,
+#pose.decor-change #pose-aide,
+#pose.decor-change .pose-bonus-bouton,
+#pose.decor-change #pose-defi-barre,
+#pose.decor-change #pose-defi-jauge {
+  transition: background-color .45s ease, color .45s ease, border-color .45s ease, fill .45s ease, box-shadow .45s ease;
+}
+#pose.decor-change .pose-case {
+  transition: background-color .45s ease, transform .14s ease-out, box-shadow .14s ease-out;
+}
+#pose.decor-change::before { animation: pose-decor-entre .45s ease-out both; }
+#pose.decor-change::after { animation: pose-decor-sort .45s ease-in forwards; }
+@keyframes pose-decor-entre { from { opacity: 0; } }
+@keyframes pose-decor-sort { to { opacity: 0; } }
+
 /* --- Mouvement réduit : l'élévation reste, sans animation ---------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
-  #pose *, #pose *::before, #pose *::after { transition-duration: .01s !important; animation-duration: .01s !important; animation-iteration-count: 1 !important; }
+  #pose, #pose::before, #pose::after, #pose *, #pose *::before, #pose *::after { transition-duration: .01s !important; animation-duration: .01s !important; animation-iteration-count: 1 !important; }
 }
