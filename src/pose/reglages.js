@@ -1,7 +1,7 @@
 // Réglages de block-pose (BS40), en un seul endroit.
 // Pour essayer d'autres valeurs : nouvellePartie({ reglages: { ...REGLAGES, plafondSerie: 8 } }).
 
-import { tirerPieces } from './tirage.js'
+import { tirageGaranti } from './tirage-garanti.js'
 
 // Multiplicateur le plus haut d'une série de coups qui effacent : le deuxième
 // coup de suite double tout, le troisième triple... jusqu'à ce plafond.
@@ -24,6 +24,8 @@ export const REGLAGES = Object.freeze({
   // Les modes de couleur viendront en BS44.
   couleurPiece: 'uni',
 
-  // Remplaçable (BS41 : tirage garanti) ; voir tirage.js pour son interface.
-  tirage: tirerPieces,
+  // Tirage garanti (BS41, tirage-garanti.js) : les pièces d'un tour, puis celles de
+  // l'aperçu, peuvent toujours toutes se poser. Remplaçable ; interface dans tirage.js
+  // (tirerPieces, le tirage simple sans garantie, reste pour les essais).
+  tirage: tirageGaranti,
 })

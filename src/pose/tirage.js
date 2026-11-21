@@ -1,13 +1,13 @@
-// Tirage des pièces de block-pose (BS40) : simple et pondéré par niveau, sans
-// garantie que les pièces tiennent. BS41 le remplacera par le tirage garanti,
-// derrière la même interface (reglages.tirage).
+// Tirage simple des pièces de block-pose (BS40) : pondéré par niveau, sans garantie
+// que les pièces tiennent. Le jeu utilise le tirage garanti de BS41 (tirage-garanti.js),
+// derrière la même interface (reglages.tirage) ; celui-ci reste pour les essais.
 //
 // Interface : tirage({ aleatoire, niveau, nombre, grille, enCours, reglages })
 // rend `nombre` identifiants de pièces du catalogue. `aleatoire()` rend un nombre
 // dans [0, 1[ et avance le hasard de la partie ; `grille` est la grille du moment
 // et `enCours` les pièces encore en main quand on tire l'aperçu (de quoi vérifier,
-// en BS41, que les pièces en main puis celles tirées peuvent toutes se poser). Ce
-// tirage-ci n'utilise que le hasard et le niveau.
+// que les pièces en main puis celles tirées peuvent toutes se poser, ce que fait le
+// tirage garanti). Ce tirage-ci n'utilise que le hasard et le niveau.
 
 import { poidsDesPieces } from './niveaux.js'
 
