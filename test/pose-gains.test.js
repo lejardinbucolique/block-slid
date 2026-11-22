@@ -463,11 +463,11 @@ function partieJouee(graine, options = {}) {
 }
 
 test('reproductible : même graine, mêmes coups, mêmes gains (la sorte d\'une surprise gagnée y compris)', () => {
-  const a = partieJouee(77)
-  const b = partieJouee(77)
+  const a = partieJouee(79)
+  const b = partieJouee(79)
   assert.deepEqual(exporterPartie(a.e), exporterPartie(b.e))
   assert.deepEqual(a.trace, b.trace)
-  assert.notDeepEqual(exporterPartie(partieJouee(78).e), exporterPartie(a.e))
+  assert.notDeepEqual(exporterPartie(partieJouee(80).e), exporterPartie(a.e))
   assert.ok(a.trace.some((t) => t !== ''), 'la partie d\'essai gagne bien quelque chose')
 })
 

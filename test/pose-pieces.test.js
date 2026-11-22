@@ -11,16 +11,16 @@ import {
 
 const dessin = (p) => p.cases.map((c) => `${c.ligne},${c.col}`).join(' ')
 
-test('le catalogue a chaque forme cadrée dans toutes ses orientations, 30 pièces en tout', () => {
+test('le catalogue a chaque forme cadrée dans toutes ses orientations, 38 pièces (L et J de BS50) en tout', () => {
   const attendues = {
     bloc: 1, barre2: 2, barre3: 2, barre4: 2, barre5: 2,
     rectangle: 2, carre2: 1, carre3: 1, carre4: 1,
-    coin: 4, grandL: 4, t: 4, s: 2, z: 2,
+    coin: 4, grandL: 4, t: 4, l: 4, j: 4, s: 2, z: 2,
   }
   const comptees = {}
   for (const p of CATALOGUE) comptees[p.forme] = (comptees[p.forme] ?? 0) + 1
   assert.deepEqual(comptees, attendues)
-  assert.equal(CATALOGUE.length, 30)
+  assert.equal(CATALOGUE.length, 38)
 })
 
 test('aucune pièce en double, ni par son id ni par son dessin', () => {

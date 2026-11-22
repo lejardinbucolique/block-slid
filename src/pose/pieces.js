@@ -26,6 +26,9 @@ export const FORMES = Object.freeze([
   // Rectangle 2x3, debout en 3x2 dans son autre orientation.
   { forme: 'rectangle', difficulte: 2, motif: ['###', '###'] },
   { forme: 't', difficulte: 2, motif: ['###', '.#.'] },
+  // L de 4 cases (BS50), trois en ligne et une au bout, et son symétrique J.
+  { forme: 'l', difficulte: 2, motif: ['###', '#..'] },
+  { forme: 'j', difficulte: 2, motif: ['###', '..#'] },
   { forme: 'carre3', difficulte: 3, motif: ['###', '###', '###'] },
   { forme: 's', difficulte: 3, motif: ['.##', '##.'] },
   { forme: 'z', difficulte: 3, motif: ['##.', '.##'] },
