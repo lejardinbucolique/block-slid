@@ -28,6 +28,16 @@ export const POIDS_NIVEAUX = Object.freeze([
   [4, 14, 28, 54],
 ].map(Object.freeze))
 
+// Le premier niveau « difficile » (BS51) : à partir de lui, le joueur planifie avec les six
+// pièces (main et aperçu) et peut se mettre dans l'impasse. En dessous, deux aides : la main
+// qui arrive est toujours posable en entier (le filet du moteur), et le tirage cherche les
+// pièces qui comblent les espaces libres et finissent des lignes. Le seul endroit où changer ce seuil.
+export const NIVEAU_DIFFICILE = 7
+
+// La force de l'aide au tirage : 1 au niveau 1, qui s'estompe d'un niveau à l'autre, 0 dès
+// le niveau difficile (pas de marche brutale).
+export const aideDuNiveau = (niveau) => (niveau >= NIVEAU_DIFFICILE ? 0 : (NIVEAU_DIFFICILE - niveau) / (NIVEAU_DIFFICILE - NIVEAU_MIN))
+
 export const niveauValide = (n) => Number.isInteger(n) && n >= NIVEAU_MIN && n <= NIVEAU_MAX
 
 // Le poids de tirage de chaque pièce à un niveau : [{ id, poids }], dans l'ordre

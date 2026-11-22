@@ -1,7 +1,7 @@
 // Réglages de block-pose (BS40), en un seul endroit.
 // Pour essayer d'autres valeurs : nouvellePartie({ reglages: { ...REGLAGES, plafondSerie: 8 } }).
 
-import { tirageGaranti } from './tirage-garanti.js'
+import { tirageGaranti, mainPosable } from './tirage-garanti.js'
 import { GAINS } from './gains.js'
 
 // Multiplicateur le plus haut d'une série de coups qui effacent : le deuxième
@@ -32,4 +32,7 @@ export const REGLAGES = Object.freeze({
   // l'aperçu, peuvent toujours toutes se poser. Remplaçable ; interface dans tirage.js
   // (tirerPieces, le tirage simple sans garantie, reste pour les essais).
   tirage: tirageGaranti,
+  // Le filet des niveaux faciles (BS51, moteur.js) : la main qui arrive est-elle posable en
+  // entier ? Sans cette fonction, aucun filet.
+  mainPosable,
 })

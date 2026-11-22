@@ -49,7 +49,7 @@
 
 import { REGLAGES } from './reglages.js'
 import { piece, pieceSuivante } from './pieces.js'
-import { NIVEAU_PAR_DEFAUT, niveauValide } from './niveaux.js'
+import { NIVEAU_PAR_DEFAUT, NIVEAU_DIFFICILE, niveauValide } from './niveaux.js'
 import { SORTES, sorteValide, reserveVide, ajouterBonus, retirerBonus, lireReserve } from './bonus.js'
 import { AU_CHOIX, nouveauDefi, compteSurprise, gainsDeCoup } from './gains.js'
 import { LISTE, couleursDepart, couleursSuivantes, couleursDePieces, lireCouleurs } from './couleurs.js'
@@ -148,7 +148,10 @@ export function poser(etat, index, ligne, col) {
   e.annulation.gagnes = appliquerGains(e, gains)
   // Une grille vidée change l'entrée des couleurs avant le prochain tirage.
   if (grilleVidee) e.couleurs = couleursSuivantes(e.couleurs, () => aleatoire(e, 'hasardCouleurs'))
+  const apercuAvant = e.suivantes
   const nouveauTour = finDeTour(e)
+  // La main qui est arrivée n'est pas l'aperçu annoncé : le filet des niveaux faciles l'a remplacée.
+  const mainRemplacee = nouveauTour && e.enCours !== apercuAvant
 
   e.dernierCoup = {
     index,
@@ -168,6 +171,7 @@ export function poser(etat, index, ligne, col) {
     defiFini,
     surprise,
     nouveauTour,
+    mainRemplacee,
     bloquee: bloquee(e),
     perdue: perdue(e),
   }
@@ -176,12 +180,28 @@ export function poser(etat, index, ligne, col) {
 
 // Quand les trois pièces sont posées ou retirées, l'aperçu passe en main et un nouvel
 // aperçu est tiré. Rend vrai si un nouveau tour commence.
+//
+// Filet des niveaux faciles (BS51, niveaux.js) : si le joueur a rendu l'aperçu impossible à
+// poser en entier, la main n'est pas cet aperçu mais un tirage neuf, garanti sur la grille réelle,
+// et le nouvel aperçu se tire à partir d'elle. Une main dont la recherche épuise son budget reste.
 function finDeTour(e) {
   if (!e.enCours.every((x) => x === null)) return false
   e.enCours = e.suivantes
+  if (mainImpossible(e)) {
+    e.enCours = []
+    e.suivantes = []
+    e.enCours = tirer(e, e.reglages.piecesParTour)
+  }
   e.suivantes = tirer(e, e.reglages.piecesParTour)
   e.tours += 1
   return true
+}
+
+function mainImpossible(e) {
+  const { mainPosable } = e.reglages
+  if (e.niveau >= NIVEAU_DIFFICILE || typeof mainPosable !== 'function') return false
+  const { posable, epuise } = mainPosable(e.grille, e.enCours.map((x) => x.id))
+  return !posable && !epuise
 }
 
 // Ce qu'annulerCoup rend : l'état d'une partie hors réserve et niveau, en données simples.

@@ -23,7 +23,7 @@ import {
 
 // Les points d'une pose, d'après la formule de reglages.js, sans la jouer (la jouer tire
 // de nouvelles pièces quand le tour finit, ce qui coûterait cher pour chaque candidat).
-function evaluer(etat, id, ligne, col) {
+export function evaluer(etat, id, ligne, col) {
   const { lignes: H, colonnes: L, pointsParCase, pointsParCaseEffacee, plafondSerie } = etat.reglages
   const p = piece(id)
   const g = etat.grille.map((r) => r.map((v) => v !== null))
@@ -48,7 +48,7 @@ function evaluer(etat, id, ligne, col) {
 }
 
 // Le meilleur coup du robot : { index, ligne, col, points } ou null.
-function meilleurCoup(etat) {
+export function meilleurCoup(etat) {
   let meilleur = null
   for (const index of piecesJouables(etat)) {
     for (const { ligne, col } of positionsPossibles(etat, index)) {
