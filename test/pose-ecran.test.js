@@ -213,8 +213,13 @@ test('l\'écran donne à chaque case un bloc à deux éléments, et allume puis 
   const source = lire('src/pose/ecran.js')
   assert.match(source, /bloc\.append\(document\.createElement\('i'\)\)/)
   assert.match(source, /sensEffacement\(coup\)/)
-  assert.match(source, /marquerEffacement\(coup, 'allume'\)/)
-  assert.match(source, /marquerEffacement\(coup, 'efface'\)/)
+  assert.match(source, /marquerEffacement\(coup, 'allume', allume\)/)
+  assert.match(source, /marquerEffacement\(coup, 'efface', efface\)/)
+  // La Laine a ses durées, plus longues : environ une seconde en tout (BS54).
+  assert.match(source, /style === 'laine' \? DUREES_LAINE_MS\.allume : DUREE_ALLUME_MS/)
+  assert.match(source, /style === 'laine' \? DUREES_LAINE_MS\.efface : DUREE_EFFACE_STYLE_MS/)
+  // La durée de l'étape va sur les blocs qui s'effacent, pas sur la racine (BS53).
+  assert.doesNotMatch(source, /racine\.style\.setProperty\('--duree'/)
   // Le style Uni garde son effacement direct, sans temps d'allumage.
   assert.match(source, /if \(style === STYLE_UNI\)/)
   // Les textures lisent le nombre de cases d'une ligne.

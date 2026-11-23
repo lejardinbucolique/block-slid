@@ -233,8 +233,30 @@
   margin: 1px;
   background: var(--pose-motif-case), var(--pose-case-vide);
   border-radius: 4px;
-  transition: transform .14s ease-out, box-shadow .14s ease-out, background-color .14s;
+  isolation: isolate; /* ses deux couches d'aperçu se peignent sous son bloc (z-index: -1) */
+  transition: transform .14s ease-out;
 }
+/* L'aperçu du coup se peint dans deux couches de la case, qui ne font que s'allumer (opacity) :
+   la surface qui s'élève, son ombre (::before), et le halo de la case visée (::after). Une
+   transition d'ombre ou de fond sur la case elle-même la faisait repeindre à chaque image,
+   texture du bloc comprise : le glisser saccadait sous les styles riches (BS53). */
+#pose .pose-case::before,
+#pose .pose-case:not(.surprise)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: -1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .14s ease-out;
+}
+#pose .pose-case::before {
+  background: var(--pose-motif-case), var(--pose-case-vide-haut);
+  box-shadow: 0 calc(var(--cell) * .12) calc(var(--cell) * .12) var(--pose-ombre-pose);
+}
+#pose .pose-case:not(.surprise)::after { box-shadow: 0 0 0 2px #fff, 0 0 calc(var(--cell) * .35) rgba(255, 255, 255, .9); }
+
 
 /* Un bloc : une case de pièce, sur la grille comme dans les rangées de pièces. Son enveloppe
    .pose-bloc (la couleur, l'état d'une animation) contient le dessin <i>. Les deux teintes --c1
@@ -300,19 +322,43 @@
 
 /* L'aperçu du coup : l'ombre pâle où la pièce tombera, l'emplacement qui s'allume... */
 #pose .pose-case.ombre > .pose-bloc { visibility: visible; opacity: .5; }
-#pose .pose-case.vise { box-shadow: 0 0 0 2px #fff, 0 0 calc(var(--cell) * .35) rgba(255, 255, 255, .9); z-index: 1; }
+#pose .pose-case.vise { z-index: 1; }
+/* La couche de l'ombre (ecran.js, preparerOmbre) : ses cases sont des cases visées, posées au-dessus
+   des cases ordinaires et sous celles qui s'élèvent, comme une case visée de la grille. */
+#pose-ombre {
+  position: absolute;
+  left: 5px; /* CADRE_PX de ecran.js */
+  top: 5px;
+  width: 0;
+  height: 0;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+  /* Couche à part par l'opacité seule : déclarée pour transform, elle serait rastérisée hors de la
+     grille de pixels (le plateau est centré) et l'ombre paraîtrait floue. */
+  will-change: opacity;
+}
+#pose-ombre.montre { opacity: 1; }
+#pose .pose-ombre-case {
+  position: absolute;
+  width: calc(var(--cell) - 2px);
+  height: calc(var(--cell) - 2px);
+  background: var(--pose-motif-case), var(--pose-case-vide); /* recouvre le halo des voisines, comme une case */
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px #fff, 0 0 calc(var(--cell) * .35) rgba(255, 255, 255, .9);
+}
+#pose .pose-ombre-case > .pose-bloc { position: absolute; inset: -1px; opacity: .75; }
+#pose .pose-case.vise::after { opacity: 1; }
 #pose .pose-case.vise > .pose-bloc { opacity: .75; }
 
 /* ... et chaque ligne ou colonne qui serait complétée s'élève un peu au-dessus de la surface. */
 #pose .pose-case.eleve {
   z-index: 2;
-  background: var(--pose-motif-case), var(--pose-case-vide-haut);
   transform: translateY(calc(var(--cell) * -.09)) scale(1.04);
-  box-shadow: 0 calc(var(--cell) * .12) calc(var(--cell) * .12) var(--pose-ombre-pose);
 }
-#pose .pose-case.eleve.vise {
-  box-shadow: 0 0 0 2px #fff, 0 calc(var(--cell) * .12) calc(var(--cell) * .14) var(--pose-ombre-pose);
-}
+#pose .pose-case.eleve::before { opacity: 1; }
+#pose .pose-case.eleve.vise::before { box-shadow: 0 calc(var(--cell) * .12) calc(var(--cell) * .14) var(--pose-ombre-pose); }
+#pose .pose-case.eleve.vise::after { box-shadow: 0 0 0 2px #fff; }
 
 /* La pose, l'effacement. */
 #pose .pose-case.nouveau > .pose-bloc { animation: pose-nouveau .28s ease-out; }
@@ -591,29 +637,31 @@
    que ces règles ne reprennent pas) ; tous les autres (gonfler, éclater, briser, tomber, s'éteindre...)
    n'ont pas de sens propre et se jouent tels quels, de case en case. Un croisement suit sa ligne. */
 
-/* Laine : le fil, de haut en bas, puis la bande tricotée s'enroule vers le bas. */
-#pose[data-style="laine"] .pose-bloc.allume.v > i::after {
-  left: 34%;
+/* Laine : le fil se faufile de haut en bas, puis la colonne se défait maille par maille vers le bas. */
+#pose[data-style="laine"] .pose-bloc.allume.v > i::after,
+#pose[data-style="laine"] .pose-bloc.efface.v > i::after {
+  left: 28%;
   right: auto;
-  width: 32%;
-  top: 0;
-  bottom: 0;
+  width: 44%;
+  top: -2px;
+  bottom: -2px;
   height: auto;
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--c1) 70%, #fff 30%), transparent 45%, color-mix(in srgb, var(--c2) 70%, #000 30%)),
-    repeating-linear-gradient(150deg, color-mix(in srgb, var(--c1) 75%, #fff 25%) 0 2.5px, var(--c1) 3.5px 5px, color-mix(in srgb, var(--c2) 80%, #000 20%) 6px 7px);
+    linear-gradient(90deg, color-mix(in srgb, var(--c1) 60%, #fff 40%), transparent 45%, color-mix(in srgb, var(--c2) 65%, #000 35%)),
+    repeating-linear-gradient(150deg, color-mix(in srgb, var(--c1) 70%, #fff 30%) 0 3px, var(--c1) 4px 6px, color-mix(in srgb, var(--c2) 75%, #000 25%) 7px 9px);
   box-shadow: 0 0 2px 1px color-mix(in srgb, var(--c1) 55%, transparent), 2px 0 3px color-mix(in srgb, var(--c2) 50%, #000 50%);
   transform-origin: center top;
-  animation-name: laine-fil-v;
 }
+#pose[data-style="laine"] .pose-bloc.allume.v > i::after { animation-name: laine-fil-v; }
 @keyframes laine-fil-v { from { transform: scaleY(0); } }
 #pose[data-style="laine"] .pose-bloc.efface.v > i {
   transform-origin: center bottom;
   animation-name: laine-efface-v;
 }
 @keyframes laine-efface-v {
-  35% { transform: scaleX(.4); }
-  to { transform: translateY(80%) scaleX(.4) rotate(-70deg) scaleY(.3); opacity: 0; }
+  0% { animation-timing-function: steps(5, end); }
+  70% { transform: scaleY(.14) scaleX(.6); opacity: 1; animation-timing-function: ease-in; }
+  to { transform: translateX(110%) scaleY(.14) scaleX(.6) rotate(-35deg); opacity: 0; }
 }
 
 /* Béton : la fissure court le long de la colonne. */

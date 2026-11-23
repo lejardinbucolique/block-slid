@@ -82,6 +82,8 @@ const DUREE_EFFACE_MS = 300
 // s'allume (le fil de la Laine, l'éclat du Verre...), puis ses cases disparaissent.
 const DUREE_ALLUME_MS = 320
 const DUREE_EFFACE_STYLE_MS = 260
+// La Laine prend son temps : le fil se faufile, puis la bande se défait maille par maille (BS54).
+const DUREES_LAINE_MS = { allume: 450, efface: 600 }
 const DUREE_POINTS_MS = 1000
 const DUREE_ENVOL_MS = 150
 const DUREE_RETOUR_MS = 190
@@ -182,6 +184,7 @@ const HTML_RACINE = `
   <div id="pose-zone">
     <div id="pose-plateau">
       <div id="pose-grille" role="application" aria-label="Grille de jeu"></div>
+      <div id="pose-ombre" aria-hidden="true"></div>
       <div id="pose-effets" aria-hidden="true"></div>
     </div>
   </div>
@@ -257,6 +260,7 @@ export async function demarrerJeu() {
   const haut = $('pose-haut')
   const grilleEl = $('pose-grille')
   const effets = $('pose-effets')
+  const ombreEl = $('pose-ombre')
   const bonusEl = $('pose-bonus')
   const aideEl = $('pose-aide')
   const mainEl = $('pose-main')
@@ -415,6 +419,7 @@ export async function demarrerJeu() {
         el.className = `pose-case${valeur !== null ? ' occupee' : ''}${estSurprise ? ' surprise' : ''}`
         bloc.className = 'pose-bloc'
         bloc.style.removeProperty('--col')
+        bloc.style.removeProperty('--duree')
         if (valeur !== null) bloc.style.setProperty('--couleur', couleurDe(valeur))
         if (estSurprise) el.dataset.reste = String(surprise.reste)
         else delete el.dataset.reste
@@ -573,25 +578,60 @@ export async function demarrerJeu() {
 
   // --- Aperçu du coup pendant le glisser --------------------------------------------------
 
+  // L'ombre de la pièce tirée vit dans sa propre couche (#pose-ombre), dessinée une fois par
+  // glisser puis seulement déplacée : changer de case visée ne repeint plus aucune texture (BS53).
+  // Ses cases imitent une case visée de la grille (même place, même halo, bloc à .75). Une case
+  // visée qui s'élève (la pièce complète sa ligne) se montre, elle, dans la grille, élevée avec
+  // les autres : sa case de la couche se cache.
+  function preparerOmbre(enMain) {
+    const p = piece(enMain.id)
+    ombreEl.classList.remove('montre')
+    ombreEl.replaceChildren(...p.cases.map((c, i) => {
+      const el = document.createElement('div')
+      el.className = 'pose-ombre-case'
+      el.style.left = `${c.col * cellule + 1}px`
+      el.style.top = `${c.ligne * cellule + 1}px`
+      const bloc = creerBloc()
+      bloc.style.setProperty('--couleur', couleurDe(enMain.couleurs?.[i] ?? enMain.couleur))
+      el.append(bloc)
+      return el
+    }))
+  }
+
   function effacerApercu() {
     for (const { el } of touchees) el.classList.remove('ombre', 'vise', 'eleve')
     touchees = []
+    ombreEl.classList.remove('montre')
   }
 
   function montrerApercu(apercu, enMain) {
-    effacerApercu()
-    if (!apercu?.valide) return
+    for (const { el } of touchees) el.classList.remove('ombre', 'vise', 'eleve')
+    touchees = []
+    if (!apercu?.valide) {
+      ombreEl.classList.remove('montre')
+      return
+    }
+    const eleves = casesElevees(apercu, REGLAGES.lignes, REGLAGES.colonnes)
+    const p = piece(enMain.id)
+    const dl = apercu.cases[0].ligne - p.cases[0].ligne
+    const dk = apercu.cases[0].col - p.cases[0].col
+    ombreEl.style.translate = `${dk * cellule}px ${dl * cellule}px`
     apercu.cases.forEach((c, i) => {
+      const eleve = eleves.some((e) => e.ligne === c.ligne && e.col === c.col)
+      const el = ombreEl.children[i]
+      if (el && el.hidden !== eleve) el.hidden = eleve
+      if (!eleve) return
       const cible = laCase(c.ligne, c.col)
       cible.bloc.style.setProperty('--couleur', couleurDe(enMain.couleurs?.[i] ?? enMain.couleur))
       cible.el.classList.add('ombre', 'vise')
       touchees.push(cible)
     })
-    for (const c of casesElevees(apercu, REGLAGES.lignes, REGLAGES.colonnes)) {
+    for (const c of eleves) {
       const cible = laCase(c.ligne, c.col)
       cible.el.classList.add('eleve')
       if (!touchees.includes(cible)) touchees.push(cible)
     }
+    ombreEl.classList.add('montre')
   }
 
   // --- Geste : tirer une pièce ------------------------------------------------------------
@@ -650,6 +690,7 @@ export async function demarrerJeu() {
     racine.append(fantome)
     try { mainEl.setPointerCapture(e.pointerId) } catch { /* souris sortie de la fenêtre : sans importance */ }
     glisse = { pointeur: e.pointerId, index, enMain, slot, fantome, cle: null, apercu: null }
+    preparerOmbre(enMain)
     void fantome.offsetWidth // le départ est posé : la suite s'anime depuis lui
     slot.classList.add('leve')
     placerFantome(e)
@@ -767,15 +808,15 @@ export async function demarrerJeu() {
         return
       }
       // Sous une texture : la ligne s'allume, les points montent, puis ses cases disparaissent.
-      racine.style.setProperty('--duree', `${DUREE_ALLUME_MS}ms`)
-      marquerEffacement(coup, 'allume')
+      const allume = style === 'laine' ? DUREES_LAINE_MS.allume : DUREE_ALLUME_MS
+      const efface = style === 'laine' ? DUREES_LAINE_MS.efface : DUREE_EFFACE_STYLE_MS
+      marquerEffacement(coup, 'allume', allume)
       dessinerScore()
       pointsFlottants(coup)
       lecture.minuteurs.push(setTimeout(() => {
-        racine.style.setProperty('--duree', `${DUREE_EFFACE_STYLE_MS}ms`)
-        marquerEffacement(coup, 'efface')
-        lecture.minuteurs.push(setTimeout(conclure, DUREE_EFFACE_STYLE_MS))
-      }, DUREE_ALLUME_MS))
+        marquerEffacement(coup, 'efface', efface)
+        lecture.minuteurs.push(setTimeout(conclure, efface))
+      }, allume))
     }
     lecture.minuteurs.push(setTimeout(apresLaPose, DUREE_POSE_MS))
   }
@@ -783,10 +824,13 @@ export async function demarrerJeu() {
   // Met chaque case que le coup efface dans l'état `genre` (« allume » ou « efface »). Les styles
   // étalent leur animation de case en case d'après --col, la place de la case le long de sa ligne ou
   // de sa colonne ; `v` demande la version verticale de l'effet, pour une colonne (sensEffacement).
-  function marquerEffacement(coup, genre) {
+  // `duree` (ms), la durée de l'étape que les textures lisent dans --duree, se pose sur ces seuls
+  // blocs : posée sur la racine, elle faisait recalculer le style de tout l'écran (BS53).
+  function marquerEffacement(coup, genre, duree) {
     for (const m of sensEffacement(coup)) {
       const { bloc } = laCase(m.ligne, m.col)
       bloc.style.setProperty('--col', String(m.position))
+      if (duree) bloc.style.setProperty('--duree', `${duree}ms`)
       bloc.classList.remove('allume', 'efface')
       bloc.classList.toggle('v', m.vertical)
       bloc.classList.add(genre)
@@ -799,7 +843,6 @@ export async function demarrerJeu() {
     const { minuteurs, fin: suite } = lecture
     lecture = null
     for (const m of minuteurs) clearTimeout(m)
-    racine.style.removeProperty('--duree')
     suite()
   }
 

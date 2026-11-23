@@ -65,6 +65,8 @@ const DUREES_MS = {
   defaite: 350,
   figure: 600, // le carré de la figure s'allume (réussie) ou se renouvelle (expirée)
 }
+// La Laine prend son temps : le fil se faufile, puis la bande se défait maille par maille (BS54).
+const DUREES_LAINE_MS = { complete: 450, efface: 600 }
 const DUREE_POINTS_MS = 900 // le « +10 » qui monte depuis la ligne effacée
 const DUREE_GAIN_MS = 1200 // le bonus d'une figure réussie, au milieu de la grille
 const REGLAGES_SANS_FIGURES = Object.freeze({ ...REGLAGES, figures: null })
@@ -145,12 +147,24 @@ export function demarrerJeu() {
     return { el }
   }
 
-  function placer(rec, b, zonePlace, vue) {
+  // La durée d'une étape (--duree, que lisent la transition d'un bloc et les animations des styles)
+  // se pose sur chaque bloc qui bouge ou s'anime, et seulement quand elle change : posée sur tout le
+  // plateau, elle faisait recalculer le style de tous les blocs à chaque étape d'un coup (BS53).
+  function dureeSur(el, duree) {
+    const valeur = `${duree}ms`
+    if (el.style.getPropertyValue('--duree') !== valeur) el.style.setProperty('--duree', valeur)
+  }
+
+  function placer(rec, b, zonePlace, vue, duree) {
     const { el } = rec
     const y = zonePlace === 'grille' ? b.ligne * g.ch : yAvenir(zonePlace === 'a1' ? 0 : 1)
-    el.style.width = `${b.largeur * g.cw}px`
-    el.style.height = `${zonePlace === 'grille' ? g.ch : g.ph}px`
-    el.style.transform = `translate(${b.col * g.cw}px, ${y}px)`
+    const largeur = `${b.largeur * g.cw}px`
+    const hauteur = `${zonePlace === 'grille' ? g.ch : g.ph}px`
+    const transform = `translate(${b.col * g.cw}px, ${y}px)`
+    if (el.style.width !== largeur || el.style.height !== hauteur || el.style.transform !== transform) dureeSur(el, duree)
+    el.style.width = largeur
+    el.style.height = hauteur
+    el.style.transform = transform
     el.style.setProperty('--col', String(b.col)) // l'animation d'un style s'étale de colonne en colonne
     el.style.setProperty('--l', String(b.largeur)) // la boule de Papier reste ronde quelle que soit la longueur
     el.classList.remove('glisse', 'tire', 'refus', 'allume')
@@ -167,7 +181,6 @@ export function demarrerJeu() {
 
   // Pose une vue (par défaut l'état du moteur) ; `duree` règle le temps des mouvements.
   function afficher({ animer = true, vue = vueFinale(), duree = 300 } = {}) {
-    plateau.style.setProperty('--duree', `${duree}ms`)
     const presents = new Map()
     for (const b of vue.blocs) presents.set(b.id, [b, 'grille'])
     vue.aVenir.forEach((ligne, i) => ligne.forEach((b) => presents.set(b.id, [b, i === 0 ? 'a1' : 'a2'])))
@@ -178,17 +191,18 @@ export function demarrerJeu() {
       if (!rec) {
         rec = creerBloc(b)
         elements.set(id, rec)
-        placer(rec, b, place, vue)
+        placer(rec, b, place, vue, duree)
         if (animer) rec.el.classList.add('entre')
         conteneur.appendChild(rec.el)
       } else {
-        placer(rec, b, place, vue)
+        placer(rec, b, place, vue, duree)
       }
     }
     for (const [id, rec] of elements) {
       if (presents.has(id)) continue
       elements.delete(id)
       if (animer) {
+        dureeSur(rec.el, duree)
         rec.el.classList.add('efface')
         partants.add(rec.el)
         setTimeout(() => { rec.el.remove(); partants.delete(rec.el) }, duree)
@@ -199,7 +213,12 @@ export function demarrerJeu() {
     // Les lignes pleines s'allument ; les points montent depuis chacune.
     if (animer && vue.etape === 'complete') {
       const lignes = new Set(vue.lignes.map((l) => l.ligne))
-      for (const b of vue.blocs) if (lignes.has(b.ligne)) elements.get(b.id).el.classList.add('allume')
+      for (const b of vue.blocs) {
+        if (!lignes.has(b.ligne)) continue
+        const { el } = elements.get(b.id)
+        dureeSur(el, duree)
+        el.classList.add('allume')
+      }
       for (const l of vue.lignes) pointsFlottants(l)
     }
     afficherScore(vue.score)
@@ -440,7 +459,7 @@ export function demarrerJeu() {
     const suite = () => {
       if (i >= etapes.length) return conclure()
       const etape = etapes[i++]
-      const duree = DUREES_MS[etape.genre]
+      const duree = (plateau.dataset.style === 'laine' && DUREES_LAINE_MS[etape.genre]) || DUREES_MS[etape.genre]
       if (etape.genre === 'complete') for (const l of etape.lignes) score += l.points
       afficher({
         duree,
@@ -472,7 +491,6 @@ export function demarrerJeu() {
     } else {
       afficher({ animer: false })
     }
-    plateau.style.removeProperty('--duree')
     if (figure?.issue === 'reussie') changerStyle()
     if (figure) animerFigure(figure)
     if (etat.finie && minuteurFin === null) minuteurFin = setTimeout(afficherFin, DELAI_FIN_MS)
