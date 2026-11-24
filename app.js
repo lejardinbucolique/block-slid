@@ -1,5 +1,6 @@
 import { JEUX, JEU_PAR_DEFAUT, jeuxDisponibles, choixDeJeuVisible } from './src/jeux.js'
 import { jeuChoisi, retenirJeu } from './src/ui/stockage.js'
+import { suivreGestes, animationEnCours, rechargerApresGeste, verifierRegulierement } from './src/ui/mise-a-jour.js'
 
 // Un point d'entrée par jeu, chargé seulement quand le jeu est choisi (BS39).
 const POINTS_ENTREE = {
@@ -85,15 +86,19 @@ POINTS_ENTREE[jeu]()
 
 // Mise à jour : sw.js prend la main dès qu'une nouvelle version est installée
 // (skipWaiting, clients.claim) ; la page se recharge alors une seule fois pour
-// l'afficher, à tout moment : la partie en cours est gardée et se retrouve (BS9).
+// l'afficher, après le geste en cours : la partie est gardée et se retrouve (BS9, BS56).
 if ("serviceWorker" in navigator) {
+  const occupe = (() => {
+    const gesteEnCours = suivreGestes(document);
+    return () => gesteEnCours() || animationEnCours(document);
+  })();
   const sw = navigator.serviceWorker;
   const avaitControleur = !!sw.controller; // première installation : pas de rechargement
   let recharge = false;
   const recharger = () => {
     if (recharge) return;
     recharge = true;
-    location.reload();
+    rechargerApresGeste({ occupe, recharger: () => location.reload() });
   };
   sw.addEventListener("controllerchange", () => {
     if (!avaitControleur || recharge) return;
@@ -115,6 +120,7 @@ if ("serviceWorker" in navigator) {
         document.addEventListener("visibilitychange", () => {
           if (document.visibilityState === "visible") reg.update().catch(() => {});
         });
+        verifierRegulierement({ doc: document, verifier: () => reg.update().catch(() => {}) });
         return sw.ready;
       })
       .then(afficherVersion)
