@@ -181,8 +181,8 @@ const presqueVide = (extra = {}) => depuisTexte({
   ...extra,
 })
 
-test('une grille vidée passe à l\'entrée suivante, qui touche les pièces tirées ensuite seulement', () => {
-  const e = presqueVide()
+test('une grille vidée passe à l\'entrée suivante, prise aussitôt par les pièces visibles', () => {
+  const e = presqueVide({ reserve: { annuler: 1 } })
   assert.deepEqual(e.couleurs, { entree: 0, avances: 0 })
   const sans = poser(depuisTexte({ rangees: ['#.........'], enCours: ['bloc.0', 'bloc.0', 'bloc.0'], graine: 5 }), 0, 5, 5)
   assert.equal(sans.dernierCoup.grilleVidee, false)
@@ -194,8 +194,12 @@ test('une grille vidée passe à l\'entrée suivante, qui touche les pièces tir
   assert.equal(a.dernierCoup.nouvelleEntree, 'orange')
   assert.deepEqual(a.couleurs, { entree: 1, avances: 1 })
   assert.deepEqual(e.couleurs, { entree: 0, avances: 0 }, 'l\'ancien état ne bouge pas')
-  // Le tour continue avec les pièces déjà tirées : leur couleur est fixée.
-  assert.deepEqual(pieceCouleurs(a), Array(5).fill('uni'))
+  // Les pièces visibles prennent la nouvelle couleur tout de suite (BS60).
+  assert.deepEqual(pieceCouleurs(a), Array(5).fill('orange'))
+  // Annuler la pose leur rend l'ancienne.
+  const b = annulerCoup(a)
+  assert.deepEqual(pieceCouleurs(b), Array(6).fill('uni'))
+  assert.deepEqual(b.couleurs, { entree: 0, avances: 0 })
 })
 
 test('les pièces tirées après une grille vidée prennent la nouvelle couleur', () => {
@@ -203,11 +207,10 @@ test('les pièces tirées après une grille vidée prennent la nouvelle couleur'
   e = poser(e, 0, 9, 9)
   assert.equal(e.dernierCoup.nouveauTour, true)
   assert.equal(e.dernierCoup.nouvelleEntree, 'orange')
-  // L'aperçu passé en main garde sa couleur ; le nouvel aperçu est orange.
-  assert.deepEqual(e.enCours.map((x) => x.couleur), ['uni', 'uni', 'uni'])
+  // L'aperçu passé en main a pris la nouvelle couleur, le nouvel aperçu aussi.
+  assert.deepEqual(e.enCours.map((x) => x.couleur), ['orange', 'orange', 'orange'])
   assert.deepEqual(e.suivantes.map((x) => x.couleur), ['orange', 'orange', 'orange'])
-  // Et la pose d'une pièce déjà tirée garde sa couleur sur la grille.
-  assert.equal(poser(e, 0, 0, 0).grille[0][0], 'uni')
+  assert.equal(poser(e, 0, 0, 0).grille[0][0], 'orange')
 })
 
 test('la partie suit toute la liste puis tire au hasard, sans entrée répétée', () => {

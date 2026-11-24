@@ -46,8 +46,8 @@
 //
 // Couleurs (BS44, couleurs.js) : la couleur d'une pièce est fixée à son tirage, selon l'entrée
 // en cours de la liste de choix (etat.couleurs = { entree, avances }). Chaque grille
-// vidée passe à l'entrée suivante : les pièces déjà tirées gardent leur couleur, les
-// suivantes prennent la nouvelle. Le hasard des couleurs (l'entrée tirée après le premier
+// vidée passe à l'entrée suivante, et les pièces visibles (main et aperçu) la prennent
+// aussitôt (BS60). Le hasard des couleurs (l'entrée tirée après le premier
 // tour, la couleur de chaque pièce ou de chaque case) a sa propre suite, etat.hasardCouleurs :
 // les pièces tirées ne dépendent jamais de l'avancement des couleurs.
 //
@@ -185,7 +185,10 @@ export function poser(etat, index, ligne, col) {
   const { gains, defiFini, surprise } = gagner(e, enMain, { lignes, colonnes, casesDisparues, ligne, col, grilleVidee })
   e.annulation.gagnes = appliquerGains(e, gains)
   // Une grille vidée change l'entrée des couleurs avant le prochain tirage.
-  if (grilleVidee) e.couleurs = couleursSuivantes(e.couleurs, () => aleatoire(e, 'hasardCouleurs'))
+  if (grilleVidee) {
+    e.couleurs = couleursSuivantes(e.couleurs, () => aleatoire(e, 'hasardCouleurs'))
+    recolorer(e)
+  }
   const apercuAvant = e.suivantes
   const nouveauTour = finDeTour(e)
   // La main qui est arrivée n'est pas l'aperçu annoncé : le filet des niveaux faciles l'a remplacée.
@@ -851,6 +854,18 @@ function cloner(etat) {
     reserve: { ...etat.reserve },
     couleurs: { ...etat.couleurs },
   }
+}
+
+// Après une grille vidée (BS60) : les pièces visibles (main en cours et aperçu) prennent
+// aussitôt leurs couleurs d'après la nouvelle entrée, tirées dans la suite des couleurs ; le
+// tirage des pièces et leur surprise ne changent pas.
+function recolorer(e) {
+  const visibles = [...(e.enCours || []), ...(e.suivantes || [])].filter(Boolean)
+  const couleurs = couleursDePieces(e.couleurs, visibles.map((x) => piece(x.id).cases.length), () => aleatoire(e, 'hasardCouleurs'))
+  visibles.forEach((x, i) => {
+    delete x.couleurs
+    Object.assign(x, couleurs[i])
+  })
 }
 
 // Une pièce en main copiée, avec ses couleurs par case et sa surprise.
