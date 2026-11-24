@@ -12,30 +12,33 @@
 //
 // La rotation (BS42) passe d'une pièce à l'orientation suivante : pieceSuivante.
 //
-// `difficulte` (1 à 4) classe la forme pour le tirage selon le niveau (niveaux.js) :
-// 1 facile à poser, 2 moyenne, 3 tordue, 4 grosse ou tordue et longue.
+// `difficulte` (1 à 4) classe la forme pour le tirage selon le niveau (niveaux.js) : plus elle
+// est haute, plus la forme gêne celui qui remplit des lignes (BS55).
+// 1 grande et simple, qui remplit vite une ligne (barres de 4 et 5, rectangle, carré de 3) ;
+// 2 moyenne (barre de 3, carré de 2, T, L, J) ; 3 petite ou encombrante (bloc, barre de 2,
+// grand L, carré de 4) ; 4 tordue (coin, S, Z).
 
 export const FORMES = Object.freeze([
-  { forme: 'bloc', difficulte: 1, motif: ['#'] },
-  { forme: 'barre2', difficulte: 1, motif: ['##'] },
-  { forme: 'barre3', difficulte: 1, motif: ['###'] },
-  { forme: 'carre2', difficulte: 1, motif: ['##', '##'] },
-  { forme: 'barre4', difficulte: 2, motif: ['####'] },
+  { forme: 'bloc', difficulte: 3, motif: ['#'] },
+  { forme: 'barre2', difficulte: 3, motif: ['##'] },
+  { forme: 'barre3', difficulte: 2, motif: ['###'] },
+  { forme: 'carre2', difficulte: 2, motif: ['##', '##'] },
+  { forme: 'barre4', difficulte: 1, motif: ['####'] },
   // Coin en L de 3 cases.
-  { forme: 'coin', difficulte: 2, motif: ['#.', '##'] },
+  { forme: 'coin', difficulte: 4, motif: ['#.', '##'] },
   // Rectangle 2x3, debout en 3x2 dans son autre orientation.
-  { forme: 'rectangle', difficulte: 2, motif: ['###', '###'] },
+  { forme: 'rectangle', difficulte: 1, motif: ['###', '###'] },
   { forme: 't', difficulte: 2, motif: ['###', '.#.'] },
   // L de 4 cases (BS50), trois en ligne et une au bout, et son symétrique J.
   { forme: 'l', difficulte: 2, motif: ['###', '#..'] },
   { forme: 'j', difficulte: 2, motif: ['###', '..#'] },
-  { forme: 'carre3', difficulte: 3, motif: ['###', '###', '###'] },
-  { forme: 's', difficulte: 3, motif: ['.##', '##.'] },
-  { forme: 'z', difficulte: 3, motif: ['##.', '.##'] },
-  { forme: 'barre5', difficulte: 4, motif: ['#####'] },
-  { forme: 'carre4', difficulte: 4, motif: ['####', '####', '####', '####'] },
+  { forme: 'carre3', difficulte: 1, motif: ['###', '###', '###'] },
+  { forme: 's', difficulte: 4, motif: ['.##', '##.'] },
+  { forme: 'z', difficulte: 4, motif: ['##.', '.##'] },
+  { forme: 'barre5', difficulte: 1, motif: ['#####'] },
+  { forme: 'carre4', difficulte: 3, motif: ['####', '####', '####', '####'] },
   // Grand L de 5 cases, deux bras de 3.
-  { forme: 'grandL', difficulte: 4, motif: ['#..', '#..', '###'] },
+  { forme: 'grandL', difficulte: 3, motif: ['#..', '#..', '###'] },
 ].map(Object.freeze))
 
 // Toutes les pièces, dans l'ordre des formes puis des orientations.

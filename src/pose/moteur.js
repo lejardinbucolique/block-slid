@@ -49,12 +49,13 @@
 
 import { REGLAGES } from './reglages.js'
 import { piece, pieceSuivante } from './pieces.js'
-import { NIVEAU_PAR_DEFAUT, NIVEAU_DIFFICILE, niveauValide } from './niveaux.js'
+import { NIVEAU_PAR_DEFAUT, NIVEAU_DIFFICILE, niveauValide, aideDuNiveau, poidsDesPieces } from './niveaux.js'
 import { SORTES, sorteValide, reserveVide, ajouterBonus, retirerBonus, lireReserve } from './bonus.js'
 import { AU_CHOIX, nouveauDefi, compteSurprise, gainsDeCoup } from './gains.js'
 import { LISTE, couleursDepart, couleursSuivantes, couleursDePieces, lireCouleurs } from './couleurs.js'
 
-// Le niveau est un réglage de la partie : un niveau illisible retombe sur le niveau 1.
+// Le niveau est un réglage de la partie, qui peut changer en cours de route (changerNiveau) :
+// un niveau illisible retombe sur le niveau 1.
 // La réserve de bonus est celle du joueur (sans réserve donnée, la partie commence à
 // vide : le moteur n'en crée jamais) ; une réserve illisible est une erreur de l'appelant.
 export function nouvellePartie({ graine = Date.now(), niveau = NIVEAU_PAR_DEFAUT, reserve = reserveVide(), reglages = REGLAGES } = {}) {
@@ -184,13 +185,23 @@ export function poser(etat, index, ligne, col) {
 // Filet des niveaux faciles (BS51, niveaux.js) : si le joueur a rendu l'aperçu impossible à
 // poser en entier, la main n'est pas cet aperçu mais un tirage neuf, garanti sur la grille réelle,
 // et le nouvel aperçu se tire à partir d'elle. Une main dont la recherche épuise son budget reste.
+//
+// Garantie d'effacement (BS55) : aux niveaux faciles, si aucune pièce de la main ne peut effacer
+// une ligne ou une colonne sur la grille réelle alors qu'une pièce de la table le pourrait, la main
+// est tirée de nouveau pour en contenir une. La chance en est pleine au niveau 1 et s'estompe jusqu'au
+// niveau 7 (aideDuNiveau). La main impossible à poser est remplacée dans les mêmes conditions de chance.
 function finDeTour(e) {
   if (!e.enCours.every((x) => x === null)) return false
   e.enCours = e.suivantes
-  if (mainImpossible(e)) {
-    e.enCours = []
-    e.suivantes = []
-    e.enCours = tirer(e, e.reglages.piecesParTour)
+  const impossible = mainImpossible(e)
+  const sansEffacement = !impossible && mainSansEffacement(e)
+  if (impossible || sansEffacement) {
+    const exigerEfface = e.niveau < NIVEAU_DIFFICILE && aleatoire(e) < aideDuNiveau(e.niveau)
+    if (impossible || exigerEfface) {
+      e.enCours = []
+      e.suivantes = []
+      e.enCours = tirer(e, e.reglages.piecesParTour, exigerEfface)
+    }
   }
   e.suivantes = tirer(e, e.reglages.piecesParTour)
   e.tours += 1
@@ -202,6 +213,16 @@ function mainImpossible(e) {
   if (e.niveau >= NIVEAU_DIFFICILE || typeof mainPosable !== 'function') return false
   const { posable, epuise } = mainPosable(e.grille, e.enCours.map((x) => x.id))
   return !posable && !epuise
+}
+
+// Aux niveaux faciles : la main qui arrive n'a aucune pièce à poser qui efface, alors qu'une pièce
+// du tirage du niveau (poids non nul) le ferait sur la grille du moment.
+function mainSansEffacement(e) {
+  const { mainEfface } = e.reglages
+  if (e.niveau >= NIVEAU_DIFFICILE || typeof mainEfface !== 'function') return false
+  const possibles = poidsDesPieces(e.niveau).filter((q) => q.poids > 0).map((q) => q.id)
+  const { efface, possible } = mainEfface(e.grille, e.enCours.map((x) => x.id), possibles)
+  return !efface && possible
 }
 
 // Ce qu'annulerCoup rend : l'état d'une partie hors réserve et niveau, en données simples.
@@ -371,6 +392,18 @@ export function changerPieces(etat) {
   places.forEach((place, i) => { e.enCours[place] = neuves[i] })
   e.suivantes = tirer(e, e.reglages.piecesParTour)
   e.dernierBonus = { sorte: 'changer', anciennes, neuves: e.enCours.map((x) => x && x.id) }
+  return e
+}
+
+// Le niveau change en cours de partie (BS55) et vaut tout de suite : les pièces déjà en main et dans
+// l'aperçu restent comme elles sont, les tirages suivants et le prochain défi suivent le nouveau
+// niveau. Rien d'autre ne bouge, et annuler un coup ne ramène pas l'ancien niveau (le niveau
+// n'est pas dans l'instantané). Refusé (null) si le niveau n'est pas de 1 à 10.
+export function changerNiveau(etat, niveau) {
+  if (!niveauValide(niveau)) return null
+  if (niveau === etat.niveau) return etat
+  const e = cloner(etat)
+  e.niveau = niveau
   return e
 }
 
@@ -714,9 +747,10 @@ export function depuisTexte({ rangees = [], enCours, suivantes, niveau = NIVEAU_
 
 // `nombre` pièces, par le tirage des réglages (remplaçable, voir tirage.js) : trois pour
 // un tour, moins pour remplacer les pièces restantes d'un tour (changerPieces).
-function tirer(etat, nombre) {
+function tirer(etat, nombre, exigerEfface = false) {
   const { reglages } = etat
   const ids = reglages.tirage({
+    exigerEfface,
     aleatoire: () => aleatoire(etat),
     niveau: etat.niveau,
     nombre,

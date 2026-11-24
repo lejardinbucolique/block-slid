@@ -228,15 +228,14 @@ test('défi réussi au plafond de la réserve : le gain est perdu, sans erreur',
 
 test('défi : le seuil de chaque niveau est atteignable dans ses coups (borne théorique du score)', () => {
   assert.ok(pointsMaxParPose(REGLAGES) > 0)
-  let precedent = 0
   for (const niveau of NIVEAUX) {
     const [points, coups] = GAINS.defis[niveau - 1]
     assert.ok(Number.isInteger(points) && points > 0 && Number.isInteger(coups) && coups >= 1, `niveau ${niveau}`)
     assert.ok(points <= pointsMaxEnCoups(coups, REGLAGES), `niveau ${niveau} : ${points} points en ${coups} coups dépasse la borne théorique`)
-    assert.ok(points >= precedent, `les seuils montent avec le niveau (${niveau})`)
-    precedent = points
   }
-  assert.ok(GAINS.defis.at(-1)[0] > GAINS.defis[0][0], 'le dernier niveau demande plus que le premier')
+  // BS55 : les seuils ne montent plus avec le niveau. Le robot marque plus aux niveaux faciles, où le
+  // tirage lui donne des pièces qui effacent, que vers le niveau 10 ; chaque seuil suit ce que le robot
+  // marque (voir GAINS.defis), la difficulté du défi reste la même.
   // Et il faut vraiment enchaîner des lignes : une pose simple (au plus quelques points)
   // est très loin du seuil.
   assert.ok(Math.max(...CATALOGUE.map((p) => p.cases.length)) * REGLAGES.pointsParCase * GAINS.defis[0][1] < GAINS.defis[0][0] / 4)
@@ -450,7 +449,7 @@ test('choisir un bonus empêche d\'annuler la pose qui l\'a donné', () => {
 // --- Reproductibilité, hasard à part ----------------------------------------------
 
 function partieJouee(graine, options = {}) {
-  let e = nouvellePartie({ graine, niveau: 1, reserve: reserveInitiale(), ...options })
+  let e = nouvellePartie({ graine, niveau: 3, reserve: reserveInitiale(), ...options })
   const trace = []
   for (let n = 0; n < 300 && piecesJouables(e).length > 0; n++) {
     const index = piecesJouables(e)[0]

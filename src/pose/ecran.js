@@ -33,6 +33,7 @@ import {
   supprimerPiece,
   tournerPiece,
   changerPieces,
+  changerNiveau as niveauDeLaPartie,
   annulerCoup,
   exporterPartie,
   importerPartie,
@@ -310,7 +311,8 @@ export async function demarrerJeu() {
   // version du jeu) : alors une nouvelle partie commence, avec la réserve et le niveau du joueur.
   function partieDepart() {
     const reprise = importerPartie(partiePoseGardee())
-    if (reprise && !perdue(reprise)) return reprise
+    // Le niveau réglé vaut pour la partie reprise (BS55) : une partie gardée avant ce réglage reprend le curseur.
+    if (reprise && !perdue(reprise)) return niveauDeLaPartie(reprise, niveau) ?? reprise
     return nouvellePartie({ niveau, reserve: reserveDuJoueur() })
   }
 
@@ -1115,23 +1117,25 @@ export async function demarrerJeu() {
   $('pose-vibration-moins').addEventListener('click', () => changerVibration(vibration - 1, true))
   $('pose-vibration-plus').addEventListener('click', () => changerVibration(vibration + 1, true))
 
-  // Le niveau de 1 à 10 : il ne bouge pas tant qu'on ne le change pas, et un changement vaut
-  // pour la prochaine partie, jamais pour celle en cours (BS38).
+  // Le niveau de 1 à 10 : il ne bouge pas tant qu'on ne le change pas, et un changement vaut tout
+  // de suite, pour la partie en cours aussi (BS55) : les pièces déjà en main et dans l'aperçu restent,
+  // les tirages suivants suivent le nouveau niveau.
   const curseurNiveau = $('pose-niveau')
 
   function afficherNiveau() {
     curseurNiveau.value = String(niveau)
     $('pose-niveau-moins').disabled = niveau <= NIVEAU_MIN
     $('pose-niveau-plus').disabled = niveau >= NIVEAU_MAX
-    const suite = niveau === etat.niveau
-      ? 'Un changement vaut pour la prochaine partie.'
-      : `Il vaudra pour la prochaine partie : la partie en cours reste au niveau ${etat.niveau}.`
-    $('pose-niveau-etat').textContent = `Niveau ${niveau} sur ${NIVEAU_MAX}. ${suite}`
+    $('pose-niveau-etat').textContent = `Niveau ${etat.niveau} sur ${NIVEAU_MAX}, en cours.`
   }
 
   function changerNiveau(n) {
     niveau = Math.min(NIVEAU_MAX, Math.max(NIVEAU_MIN, n))
     retenirNiveauPose(niveau)
+    // La partie en cours prend le niveau tout de suite et se garde avec lui.
+    const changee = niveauDeLaPartie(etat, niveau)
+    if (changee) etat = changee
+    garder()
     afficherNiveau()
   }
 

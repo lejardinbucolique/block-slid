@@ -13,8 +13,9 @@
 // table de poids du niveau (niveaux.js), et chacune est posée tout de suite, sur une
 // copie de la grille, à une place où elle tient, lignes pleines effacées. Cette suite
 // de poses est le témoin : les pièces tirées sont posables par construction.
-//   - Une pièce tirée qui ne tient nulle part sur la copie est remplacée par une pièce
-//     qui tient (tirée selon les mêmes poids, restreints à celles qui tiennent).
+//   - Seules les pièces qui tiennent sur la copie sont tirées (poids de la table, restreints à
+//     celles-là) : aux niveaux faciles, le poids grandit avec ce que la pièce efface (BS51), aux
+//     niveaux difficiles avec ce qu'elle gêne (BS55).
 //   - Le bloc de 1 case tient toujours : la copie n'est jamais pleine (une grille
 //     pleine se vide d'un coup), si bien que la construction n'échoue jamais, sans
 //     budget d'essais ni boucle sans fin. C'est le repli sûr.
@@ -36,12 +37,17 @@
 //
 // Reproductible : tout le hasard vient de aleatoire(), le hasard de la partie.
 //
+// Garantie d'effacement (BS55). Aux niveaux faciles, quand la main du tour doit être tirée sur la
+// grille réelle (`exigerEfface`, sans pièces en main), l'une de ses pièces au moins efface une
+// ligne ou une colonne dès la pose, si une pièce de la table le peut. Le moteur la demande quand la
+// main prévue par l'aperçu n'offre rien à effacer, avec une chance qui s'estompe jusqu'au niveau 7.
+//
 // Interface (voir tirage.js) : tirageGaranti({ aleatoire, niveau, nombre, grille,
-// enCours, reglages }) rend `nombre` identifiants de pièces. tirerGaranti rend la même
+// enCours, reglages, exigerEfface }) rend `nombre` identifiants de pièces. tirerGaranti rend la même
 // chose avec le détail du tirage (pour mesurer).
 
 import { piece, CATALOGUE } from './pieces.js'
-import { poidsDesPieces, aideDuNiveau, NIVEAU_MIN, NIVEAU_MAX } from './niveaux.js'
+import { poidsDesPieces, aideDuNiveau, hostiliteDuNiveau, NIVEAU_MIN, NIVEAU_MAX } from './niveaux.js'
 
 // Candidats construits par tirage : du plus large au plus serré, on en garde un.
 export const CANDIDATS = 6
@@ -63,7 +69,8 @@ export const BUDGET_AUTRES_TEMOINS = 20_000
 //                       que sa suite de poses efface
 //   AIDE_FRONTIERES     moins ceci par cent frontières entre cases pleines et libres que la suite
 //                       laisse sur la grille (une grille groupée vaut mieux qu'éparpillée)
-//   AIDE_TAILLE         plus ceci par dizaine de cases posées, fois la racine de l'aide (plutôt des grosses pièces, qui s'estompent moins vite)
+//   AIDE_TAILLE         plus ceci par dizaine de cases posées, fois la racine de l'aide (plutôt des grosses pièces) ;
+//                       0 depuis BS55 : la table de poids décide de la taille des pièces
 //   AIDE_FRAGILITE      moins ceci fois la fragilité de la main : la part des ESSAIS_FRAGILITE
 //                       parties d'essai où un joueur qui ne suit pas la suite se bloque
 // Valeurs calées à la mesure (tools/mesure-niveaux-pose.js).
@@ -71,10 +78,21 @@ export const AIDE_EFFACE = 8
 export const AIDE_EFFACE_MAX = 3
 export const AIDE_VALEUR_EFFACE = 1
 export const AIDE_FRONTIERES = 5
-export const AIDE_TAILLE = 0.3
+export const AIDE_TAILLE = 0
 export const AIDE_FRAGILITE = 10
 export const ESSAIS_FRAGILITE = 8
 export const CANDIDATS_AIDE = 16
+
+// Le tirage hostile des niveaux difficiles (BS55, niveaux.js : hostiliteDuNiveau, 0 aux niveaux
+// faciles, 1 au niveau 10) : le poids d'une pièce est multiplié par
+// 1 + hostilite * HOSTILE * (1 si elle n'efface rien sur la grille du moment, plus HOSTILE_ETROIT
+// fois la part des places où elle ne tient pas).
+// Aux niveaux difficiles on construit aussi CANDIDATS_AIDE candidats, et chacun vaut sa liberté de pose
+// moins HOSTILE_FRAGILE fois la hostilité fois sa fragilité (voir fragilite) : plus la main piège un
+// joueur qui ne suit pas la suite, plus elle est rangée au bout, là où le niveau 10 la garde.
+export const HOSTILE = 12
+export const HOSTILE_ETROIT = 2
+export const HOSTILE_FRAGILE = 3
 
 // --- Pièces et grille en masques de bits --------------------------------------
 // Une rangée de la grille est un entier dont le bit c vaut 1 si la colonne c est
@@ -245,54 +263,30 @@ function temoins(rangees, ids, dim, aleatoire, detail) {
 
 // --- Construction -------------------------------------------------------------
 
-// `nombre` pièces tirées selon les poids du niveau et posées à la suite sur la
-// copie de la grille. Rend les pièces tirées dans l'ordre où elles ont été posées.
-function construire(depart, nombre, poids, total, dim, aleatoire, detail) {
-  const { hauteur, largeur, plein } = dim
-  let grille = depart
-  const ids = []
-  for (let i = 0; i < nombre; i++) {
-    let choix = tirerSelonPoids(poids, total, aleatoire())
-    let lieux = places(grille, infos(choix), hauteur, largeur)
-    if (lieux.length === 0) {
-      // Repli : une pièce qui tient, tirée selon les mêmes poids restreints à celles-là.
-      detail.remplacees++
-      const tiennent = []
-      for (const p of poids) {
-        const l = places(grille, infos(p.id), hauteur, largeur)
-        if (l.length > 0) tiennent.push({ id: p.id, poids: p.poids, lieux: l })
-      }
-      if (tiennent.length === 0) {
-        // Grille impossible (pleine) : rien ne tient, on rend le bloc sans le poser.
-        ids.push('bloc.0')
-        continue
-      }
-      const reste = tiennent.reduce((s, p) => s + p.poids, 0)
-      choix = tirerSelonPoids(tiennent, reste, aleatoire())
-      lieux = tiennent.find((p) => p.id === choix).lieux
-    }
-    const n = lieux[Math.floor(aleatoire() * lieux.length)]
-    const p = infos(choix)
-    grille = poserEn(grille, p, Math.floor(n / largeur), n % largeur, plein)
-    ids.push(choix)
-  }
-  return ids
-}
+// Un candidat est une suite de pièces tirées et posées à la suite sur la copie
+// de la grille. Aux niveaux faciles, construireAide ; aux niveaux difficiles, construireGene.
 
 // Variante des niveaux faciles (BS51) : même construction, mais le tirage regarde la grille du
 // moment. Seules les pièces qui tiennent sont tirées, et le poids de chacune grandit avec ce
 // qu'elle peut effacer (voir AIDE_EFFACE) : on reçoit les pièces qui finissent des lignes ou
 // des colonnes. Chaque pièce est posée sur la copie là où elle efface le plus, à égalité là où
 // elle se loge le plus serré, de sorte que les pièces suivantes se tirent sur la grille que
-// le joueur aurait en jouant bien. Rend les pièces et le nombre de lignes et colonnes que
+// le joueur aurait en jouant bien. Avec `exiger`, la première pièce est une de celles qui effacent
+// sur la grille de départ (s'il y en a). Rend les pièces et le nombre de lignes et colonnes que
 // la suite de poses efface.
-function construireAide(depart, nombre, poids, aide, dim, aleatoire, memo) {
+function construireAide(depart, nombre, poids, aide, dim, aleatoire, memo, exiger) {
   const { hauteur, largeur, plein } = dim
   let grille = depart
   const ids = []
   let efface = 0
   for (let i = 0; i < nombre; i++) {
-    const options = optionsSur(grille, poids, dim, memo)
+    let options = optionsSur(grille, poids, dim, memo)
+    // La garantie d'effacement (BS55) : la première pièce est posée sur la grille de départ, elle
+    // efface donc quelque chose pour de bon quand la grille du moment le permet.
+    if (exiger && i === 0) {
+      const efface = options.filter((o) => o.meilleur > 0)
+      if (efface.length > 0) options = efface
+    }
     let total = 0
     const ponderees = options.map((o) => {
       const w = o.poids * (1 + aide * AIDE_EFFACE * Math.min(o.meilleur, AIDE_EFFACE_MAX))
@@ -322,6 +316,43 @@ function construireAide(depart, nombre, poids, aide, dim, aleatoire, memo) {
   return { ids, efface, frontieres: frontieres(grille, plein) }
 }
 
+// Variante des niveaux difficiles (BS55) : même construction que celle des niveaux faciles, mais le
+// tirage cherche à gêner. Seules les pièces qui tiennent sont tirées ; le poids de chacune grandit
+// avec ce qu'elle gêne (voir HOSTILE) : les pièces qui n'effacent rien sur la grille du moment
+// reviennent plus souvent. Chaque pièce se pose au hasard sur la copie. Rend les pièces.
+function construireGene(depart, nombre, poids, hostilite, dim, aleatoire, memo) {
+  const { largeur, plein } = dim
+  let grille = depart
+  const ids = []
+  for (let i = 0; i < nombre; i++) {
+    const options = optionsSur(grille, poids, dim, memo)
+    if (options.length === 0) {
+      ids.push('bloc.0')
+      continue
+    }
+    let total = 0
+    const ponderees = options.map((o) => {
+      const w = o.poids * (1 + hostilite * HOSTILE * ((o.meilleur === 0 ? 1 : 0) + HOSTILE_ETROIT * (1 - o.ouverture)))
+      total += w
+      return { id: o.id, poids: w }
+    })
+    const choix = tirerSelonPoids(ponderees, total, aleatoire())
+    const { lieux, meilleur } = options.find((o) => o.id === choix)
+    // Sur la copie, la pièce se pose là où elle range le moins : la suite des pièces tirées part d'une
+    // grille moins bien rangée que celle d'un joueur qui joue bien. Hors des places qui effacent, s'il y en a d'autres.
+    const p = infos(choix)
+    let bords = lieux.filter((x) => x.e < meilleur || meilleur === 0)
+    if (bords.length === 0) bords = lieux
+    const c = bords.map((x) => contact(grille, p, x.l, x.k, largeur))
+    const min = Math.min(...c)
+    const pires = bords.filter((_, j) => c[j] === min)
+    const lieu = pires[Math.floor(aleatoire() * pires.length)]
+    grille = poserEn(grille, p, lieu.l, lieu.k, plein)
+    ids.push(choix)
+  }
+  return ids
+}
+
 // Les pièces de poids non nul qui tiennent sur cette grille : { id, poids, lieux: [{ l, k, e }],
 // meilleur } avec e les lignes et colonnes effacées par la pose en (l, k), meilleur le plus grand
 // e. Mémorisé par grille le temps d'un tirage : les candidats partent des mêmes grilles.
@@ -345,7 +376,7 @@ function optionsSur(grille, poids, dim, memo) {
         lieux.push({ l, k, e })
       }
     }
-    if (lieux.length > 0) options.push({ id: q.id, poids: q.poids, lieux, meilleur })
+    if (lieux.length > 0) options.push({ id: q.id, poids: q.poids, lieux, meilleur, ouverture: lieux.length / ((hauteur - p.hauteur + 1) * (largeur - p.largeur + 1)) })
   }
   memo.set(cle, options)
   return options
@@ -442,19 +473,19 @@ function tirerSelonPoids(poids, total, r) {
 //   temoin        vrai si la garantie s'applique en entier (pas de pièces en main, ou
 //                 des pièces en main dont un témoin a été trouvé)
 //   budgetEpuise  vrai si la recherche d'un témoin des pièces en main a dépassé son budget
-//   remplacees    pièces tirées qui ne tenaient pas, remplacées par une qui tient
+//   remplacees    toujours 0 (les pièces qui ne tiennent pas ne sont jamais tirées)
 //   candidats     candidats construits
 //   liberte       liberté de pose du candidat gardé
 //   efface        lignes et colonnes que la suite de poses du candidat gardé efface
 //                 (niveaux faciles seulement, 0 sinon)
-export function tirerGaranti({ aleatoire, niveau, nombre, grille, enCours = [], reglages }) {
+export function tirerGaranti({ aleatoire, niveau, nombre, grille, enCours = [], reglages, exigerEfface = false }) {
   const hauteur = grille.length
   const largeur = grille[0].length
   const dim = { hauteur, largeur, plein: (1 << largeur) - 1 }
   const poids = poidsDesPieces(niveau)
-  const total = poids.reduce((s, p) => s + p.poids, 0)
   const aide = aideDuNiveau(niveau)
-  const nombreCandidats = aide > 0 ? CANDIDATS_AIDE : CANDIDATS
+  const hostilite = hostiliteDuNiveau(niveau)
+  const nombreCandidats = CANDIDATS_AIDE
   const detail = { temoin: true, budgetEpuise: false, remplacees: 0, candidats: nombreCandidats, liberte: 0, efface: 0 }
 
   const rangees = versMasques(grille)
@@ -471,12 +502,13 @@ export function tirerGaranti({ aleatoire, niveau, nombre, grille, enCours = [], 
   for (let j = 0; j < nombreCandidats; j++) {
     const d = j % departs.length
     if (aide > 0) {
-      const { ids, efface, frontieres } = construireAide(departs[d], nombre, poids, aide, dim, aleatoire, memo)
+      const { ids, efface, frontieres } = construireAide(departs[d], nombre, poids, aide, dim, aleatoire, memo, exigerEfface && enCours.length === 0)
       const libre = liberte(ids, parts[d])
       candidats.push({ ids, liberte: libre, efface, valeur: libre + aide * (AIDE_VALEUR_EFFACE * efface - AIDE_FRONTIERES * frontieres / 100 - AIDE_FRAGILITE * fragilite(departs[d], ids, dim, aleatoire) + Math.sqrt(aide) * AIDE_TAILLE * ids.reduce((n, id) => n + piece(id).cases.length, 0) / 10) })
     } else {
-      const ids = construire(departs[d], nombre, poids, total, dim, aleatoire, detail)
-      candidats.push({ ids, liberte: liberte(ids, parts[d]) })
+      const ids = construireGene(departs[d], nombre, poids, hostilite, dim, aleatoire, memo)
+      const libre = liberte(ids, parts[d])
+      candidats.push({ ids, liberte: libre, valeur: libre - hostilite * HOSTILE_FRAGILE * fragilite(departs[d], ids, dim, aleatoire) })
     }
   }
   // Du plus large au plus serré (à égalité, dans l'ordre de construction) ; le niveau
@@ -488,7 +520,15 @@ export function tirerGaranti({ aleatoire, niveau, nombre, grille, enCours = [], 
   const gardee = candidats[Math.round(rang * (nombreCandidats - 1))]
   detail.liberte = gardee.liberte
   detail.efface = gardee.efface ?? 0
-  return { ids: gardee.ids, detail }
+  const ids = gardee.ids
+  // Garantie d'effacement : la pièce qui efface est la première construite, on la place au hasard.
+  if (exigerEfface && aide > 0 && enCours.length === 0) {
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(aleatoire() * (i + 1))
+      ;[ids[i], ids[j]] = [ids[j], ids[i]]
+    }
+  }
+  return { ids, detail }
 }
 
 export const tirageGaranti = (contexte) => tirerGaranti(contexte).ids
@@ -502,4 +542,25 @@ export function mainPosable(grille, ids) {
   const etat = { epuise: false }
   const fin = chercherTemoin(versMasques(grille), ids, dim, () => 0, BUDGET_PREMIER_TEMOIN, etat)
   return { posable: fin !== null, epuise: etat.epuise }
+}
+
+// Sur cette grille, une des pièces `main` efface-t-elle quelque chose (une pose qui comble tout ce
+// qui manque à une ligne ou à une colonne) ? Et l'une des pièces `possibles` le ferait-elle ?
+// Rend { efface, possible }. Sert à la garantie d'effacement (moteur.js) ; ne touche pas au hasard.
+export function mainEfface(grille, main, possibles) {
+  const hauteur = grille.length
+  const largeur = grille[0].length
+  const plein = (1 << largeur) - 1
+  const rangees = versMasques(grille)
+  const manque = manques(rangees, plein)
+  const efface = (id) => {
+    const p = infos(id)
+    for (let l = 0; l + p.hauteur <= hauteur; l++) {
+      for (let k = 0; k + p.largeur <= largeur; k++) {
+        if (tientEn(rangees, p, l, k) && effacements(manque, p, l, k) > 0) return true
+      }
+    }
+    return false
+  }
+  return { efface: main.some(efface), possible: possibles.some(efface) }
 }

@@ -47,6 +47,7 @@ export {
   supprimerPiece,
   tournerPiece,
   changerPieces,
+  changerNiveau,
   annulerCoup,
   bonusUtiles,
   exporterPartie,

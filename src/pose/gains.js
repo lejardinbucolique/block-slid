@@ -42,14 +42,16 @@ export const GAINS = Object.freeze({
   // centaines, si bien qu'un défi demande d'enchaîner des lignes. Valeurs calées d'après
   // le simulateur (robot glouton : environ 7 % des défis réussis à tous les niveaux, soit un
   // bonus de défi toutes les 100 à 130 pièces) ; un joueur qui prépare ses coups fera
-  // mieux : à retoucher en jouant. Le glouton marque 45 à 65 points par pose en moyenne, ce
-  // qui monte avec le niveau : les seuils montent de même pour garder la difficulté.
+  // mieux : à retoucher en jouant. Le glouton marque plus de points par pose aux niveaux faciles
+  // (BS55 : le tirage lui donne bien plus souvent des pièces qui effacent) que vers le niveau 10 :
+  // les seuils baissent donc du niveau 1 au niveau 5, puis remontent un peu, pour garder la
+  // même difficulté de défi.
   defis: Object.freeze([
-    [740, 8],
-    [740, 8],
-    [800, 8],
-    [840, 8],
-    [880, 8],
+    [1400, 8],
+    [1250, 8],
+    [1100, 8],
+    [950, 8],
+    [900, 8],
     [920, 8],
     [960, 8],
     [980, 8],

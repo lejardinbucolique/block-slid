@@ -39,11 +39,31 @@ test('la difficulté croît sans jamais décroître d\'un niveau au suivant', ()
   for (const n of niveaux.slice(1)) assert.ok(moyenne(n) > moyenne(n - 1), `niveau ${n}`)
 })
 
-test('niveau 1 : surtout des pièces faciles, ni grosses ni tordues ; niveau 10 : tout le catalogue', () => {
-  assert.ok(partAuMoins(1, 2) <= 0.35)
+test('niveau 1 : surtout de grandes pièces simples, ni petites ni tordues ; niveau 10 : surtout des petites et des tordues, de tout dans le catalogue', () => {
+  // BS55 : la difficulté 1 est celle des grandes pièces simples (barres de 4 et 5, rectangle, carré de 3).
+  const formes = (d) => new Set(CATALOGUE.filter((p) => p.difficulte === d).map((p) => p.forme))
+  assert.deepEqual([...formes(1)].sort(), ['barre4', 'barre5', 'carre3', 'rectangle'])
+  assert.deepEqual([...formes(4)].sort(), ['coin', 's', 'z'])
+  assert.ok(1 - partAuMoins(1, 2) >= 0.5, `niveau 1 : ${1 - partAuMoins(1, 2)} de grandes pièces simples`)
   assert.ok(partAuMoins(1, 3) <= 0.1)
+  assert.equal(partAuMoins(1, 4), 0, 'ni S, ni Z, ni coin au niveau 1')
   for (const p of poidsDesPieces(10)) assert.ok(p.poids > 0, p.id)
-  assert.ok(partAuMoins(10, 4) >= 0.2)
+  assert.ok(partAuMoins(10, 4) >= 0.5, `niveau 10 : ${partAuMoins(10, 4)} de pièces tordues`)
+  assert.ok(1 - partAuMoins(10, 2) <= 0.05, 'presque plus de grandes pièces simples au niveau 10')
+})
+
+test('la taille des pièces suit le niveau : les grandes aux niveaux faciles, de moins en moins vers le niveau 10', () => {
+  const casesMoyennes = (n) => {
+    const poids = poidsDesPieces(n)
+    const total = poids.reduce((s, p) => s + p.poids, 0)
+    return poids.reduce((s, p) => s + p.poids * piece(p.id).cases.length, 0) / total
+  }
+  const moyennes = niveaux.map(casesMoyennes)
+  for (let i = 1; i < niveaux.length; i++) assert.ok(moyennes[i] < moyennes[i - 1], `niveau ${niveaux[i]} : ${moyennes}`)
+  assert.ok(moyennes[0] - moyennes[9] > 0.8, `${moyennes}`)
+  // Les barres de 4 et de 5, le rectangle et le carré de 3 : jamais plus rares qu'au niveau suivant.
+  const grandesSimples = (n) => poidsDesPieces(n).filter((p) => piece(p.id).difficulte === 1).reduce((s, p) => s + p.poids, 0)
+  for (const n of niveaux.slice(1)) assert.ok(grandesSimples(n) < grandesSimples(n - 1), `niveau ${n}`)
 })
 
 test('le tirage simple ne sort que des pièces de poids non nul, à peu près dans leurs parts', () => {
