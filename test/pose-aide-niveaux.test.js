@@ -112,14 +112,15 @@ test('le filet : un aperçu posable reste la vérité, la main n\'est pas rempla
 // --- L'invariant : une partie jouée sans suivre le témoin ----------------------------------------
 
 // Un joueur qui pose au hasard, sans jamais suivre la suite de poses du tirage. Rend, pour
-// chaque début de tour, si la main est posable en entier d'après le solveur indépendant.
+// chaque début de tour, si la main est posable en entier d'après le solveur indépendant (aux niveaux 1 et 2,
+// où l'aperçu se joue, BS58, la main peut compter moins de trois pièces : celles qui restent).
 function mainsDeParties(niveau, graines, poses) {
   const alea = generateur(niveau * 31)
   const mains = []
   for (const graine of graines) {
     let e = nouvellePartie({ graine, niveau })
     for (let i = 0; i < poses; i++) {
-      if (i === 0 || e.dernierCoup.nouveauTour) mains.push(Boolean(suite(grilleDe(e), [e.enCours.map((x) => x.id)])))
+      if (i === 0 || e.dernierCoup.nouveauTour) mains.push(Boolean(suite(grilleDe(e), [e.enCours.filter(Boolean).map((x) => x.id)])))
       const jouables = piecesJouables(e)
       if (jouables.length === 0) break
       const index = jouables[Math.floor(alea() * jouables.length)]

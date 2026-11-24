@@ -1,5 +1,6 @@
 // Mesure de la difficulté ressentie des niveaux de block-pose (BS51) : un robot glouton, sans
 // bonus et sans regard sur l'aperçu, joue des parties à chaque niveau et rapporte la survie,
+// (aux niveaux 1 et 2 où l'aperçu se joue, BS58, le robot pose les six pièces comme elles viennent),
 // le remplissage moyen de la grille, les effacements par pose, la part de mains dont une pose
 // efface quelque chose, la taille des pièces et le temps de tirage.
 //
@@ -11,9 +12,10 @@ import { meilleurCoup } from './simulateur-pose.js'
 
 const mediane = (t) => [...t].sort((a, b) => a - b)[Math.floor(t.length / 2)]
 
-// Une pose de la main efface-t-elle quelque chose, à l'ouverture du tour ?
+// Une pose de la main efface-t-elle quelque chose, à l'ouverture du tour ? Seule la main compte,
+// pas l'aperçu qui se joue aux niveaux 1 et 2 (BS58).
 function mainQuiEfface(etat) {
-  for (const index of piecesJouables(etat)) {
+  for (const index of piecesJouables(etat).filter((i) => i < etat.reglages.piecesParTour)) {
     for (const { ligne, col } of positionsPossibles(etat, index)) {
       const e = poser(etat, index, ligne, col)
       if (e.dernierCoup.lignes.length + e.dernierCoup.colonnes.length > 0) return true

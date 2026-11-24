@@ -85,7 +85,7 @@ test('une pose valide occupe les cases de la pièce, de sa couleur, sans gravit�
 })
 
 test('une pose qui sort de la grille, qui recouvre une case ou sans pièce est refusée sans rien changer', () => {
-  const e = depuisTexte({ rangees: enBas('#.........'), enCours: ['barre4.0', 'carre2.0', null], suivantes: ['bloc.0', 'bloc.0', 'bloc.0'] })
+  const e = depuisTexte({ rangees: enBas('#.........'), enCours: ['barre4.0', 'carre2.0', null], suivantes: ['bloc.0', 'bloc.0', 'bloc.0'], niveau: 3 })
   const avant = exporterPartie(e)
   assert.equal(poser(e, 0, 0, 7), null) // dépasse à droite
   assert.equal(poser(e, 0, -1, 0), null)
@@ -275,14 +275,14 @@ test('le tirage est remplaçable : il reçoit niveau, grille et pièces en main'
 test('bloquée quand aucune pièce restante ne tient nulle part, sans conclure la défaite', () => {
   // Damier : aucune case vide n'en touche une autre.
   const damier = Array.from({ length: 10 }, (_, l) => (l % 2 ? '.#.#.#.#.#' : '#.#.#.#.#.'))
-  const e = depuisTexte({ rangees: damier, enCours: ['carre2.0', 'barre2.0', 'barre2.1'], suivantes: ['bloc.0', 'bloc.0', 'bloc.0'] })
+  const e = depuisTexte({ rangees: damier, enCours: ['carre2.0', 'barre2.0', 'barre2.1'], suivantes: ['bloc.0', 'bloc.0', 'bloc.0'], niveau: 3 })
   assert.equal(bloquee(e), true)
   assert.deepEqual(piecesJouables(e), [])
-  const f = depuisTexte({ rangees: damier, enCours: ['carre2.0', 'bloc.0', null], suivantes: ['bloc.0', 'bloc.0', 'bloc.0'] })
+  const f = depuisTexte({ rangees: damier, enCours: ['carre2.0', 'bloc.0', null], suivantes: ['bloc.0', 'bloc.0', 'bloc.0'], niveau: 3 })
   assert.equal(bloquee(f), false)
   assert.deepEqual(piecesJouables(f), [1])
   // Le coup qui bloque le dit, et la partie reste un état comme un autre.
-  const g = depuisTexte({ rangees: damier.map((r, l) => (l === 0 ? '..#.#.#.#.' : r)), enCours: ['bloc.0', 'barre2.0', null], suivantes: ['bloc.0', 'bloc.0', 'bloc.0'] })
+  const g = depuisTexte({ rangees: damier.map((r, l) => (l === 0 ? '..#.#.#.#.' : r)), enCours: ['bloc.0', 'barre2.0', null], suivantes: ['bloc.0', 'bloc.0', 'bloc.0'], niveau: 3 })
   const h = poser(g, 0, 0, 0)
   assert.equal(h.dernierCoup.bloquee, true)
   assert.equal(bloquee(h), true)
@@ -317,7 +317,9 @@ test('l\'import tolérant rend null pour des données illisibles ou incohérente
   assert.equal(avec({ grille: bon.grille.map((r) => r.map(() => 3)) }), null)
   assert.equal(avec({ enCours: [null, null, null] }), null)
   assert.equal(avec({ enCours: [{ id: 'triangle.0', couleur: 'uni' }, null, null] }), null)
-  assert.equal(avec({ suivantes: [null, { id: 'bloc.0', couleur: 'uni' }, { id: 'bloc.0', couleur: 'uni' }] }), null)
+  // Une place de l'aperçu déjà posée (niveaux 1 et 2, BS58) se relit ; une pièce illisible, non.
+  assert.ok(avec({ suivantes: [null, { id: 'bloc.0', couleur: 'uni' }, { id: 'bloc.0', couleur: 'uni' }] }))
+  assert.equal(avec({ suivantes: [null, { id: 'triangle.0', couleur: 'uni' }, null] }), null)
   assert.equal(avec({ suivantes: bon.suivantes.slice(1) }), null)
   assert.equal(avec({ grille: undefined }), null)
 })

@@ -162,7 +162,7 @@ test('choisirBonus : refusé sans choix en attente ou pour une sorte inconnue ; 
 })
 
 test('une partie avec un choix en attente n\'est pas perdue, même bloquée', () => {
-  const e = { ...partie({ rangees: DAMIER_PLEIN, enCours: ['carre2.0', 'carre2.0', 'carre2.0'] }), choix: 1 }
+  const e = { ...partie({ rangees: DAMIER_PLEIN, enCours: ['carre2.0', 'carre2.0', 'carre2.0'], niveau: 3 }), choix: 1 }
   assert.equal(piecesJouables(e).length, 0)
   assert.equal(perdue(e), false)
   assert.equal(perdue({ ...e, choix: 0 }), true)

@@ -19,6 +19,7 @@ import {
   REGLAGES, GAINS, SORTES, CAUSES, NIVEAU_MIN, NIVEAU_MAX, reserveInitiale,
   nouvellePartie, poser, positionsPossibles, piecesJouables, perdue, bloquee,
   supprimerPiece, tournerPiece, changerPieces, annulerCoup, choisirBonus, bonusUtiles, piece,
+  pieceA, indicesEnJeu,
 } from '../src/pose/index.js'
 
 // Les points d'une pose, d'après la formule de reglages.js, sans la jouer (la jouer tire
@@ -47,12 +48,14 @@ export function evaluer(etat, id, ligne, col) {
   return { points: mult * (p.cases.length * pointsParCase + disparues * pointsParCaseEffacee * effaces), contact }
 }
 
-// Le meilleur coup du robot : { index, ligne, col, points } ou null.
+// Le meilleur coup du robot : { index, ligne, col, points } ou null. Il joue toutes les pièces
+// posables : la main, et l'aperçu aux niveaux où il se joue (BS58). Il ne prépare rien : il prend
+// simplement le meilleur coup parmi elles, sans regarder plus loin.
 export function meilleurCoup(etat) {
   let meilleur = null
   for (const index of piecesJouables(etat)) {
     for (const { ligne, col } of positionsPossibles(etat, index)) {
-      const { points, contact } = evaluer(etat, etat.enCours[index].id, ligne, col)
+      const { points, contact } = evaluer(etat, pieceA(etat, index).id, ligne, col)
       if (!meilleur || points > meilleur.points || (points === meilleur.points && contact > meilleur.contact)) {
         meilleur = { index, ligne, col, points, contact }
       }
@@ -64,14 +67,14 @@ export function meilleurCoup(etat) {
 // Sort d'une partie bloquée : un bonus utile de la réserve, ou null (partie perdue).
 function debloquer(etat) {
   const utiles = bonusUtiles(etat)
-  const premier = etat.enCours.findIndex(Boolean)
+  const [premier] = indicesEnJeu(etat)
   for (const sorte of ['changer', 'supprimer', 'annuler', 'tourner']) {
     if (!utiles.includes(sorte)) continue
     if (sorte === 'changer') return changerPieces(etat)
     if (sorte === 'supprimer') return supprimerPiece(etat, premier)
     if (sorte === 'annuler') return annulerCoup(etat)
-    for (let i = 0; i < etat.enCours.length; i++) {
-      const e = etat.enCours[i] && tournerPiece(etat, i)
+    for (const i of indicesEnJeu(etat)) {
+      const e = tournerPiece(etat, i)
       if (e) return e
     }
   }

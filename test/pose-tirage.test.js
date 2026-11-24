@@ -71,7 +71,8 @@ function etatsDeParties(niveau, parties, coupsMax, graine) {
       const places = positionsPossibles(e, index)
       const { ligne, col } = places[Math.floor(alea() * places.length)]
       e = poser(e, index, ligne, col)
-      if (e.dernierCoup.nouveauTour) etats.push(e)
+      // Une main entamée (places de l'aperçu déjà posées aux niveaux 1 et 2, BS58) n'est pas un début de tour.
+      if (e.dernierCoup.nouveauTour && e.enCours.every(Boolean)) etats.push(e)
     }
   }
   return etats

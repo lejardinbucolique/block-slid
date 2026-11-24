@@ -132,7 +132,7 @@ test('le moteur reçoit la réserve, ne l\'invente jamais, et la rend pour la pa
 // --- Supprimer --------------------------------------------------------------------
 
 test('supprimer : la pièce disparaît, le tour continue avec les autres, un bonus de moins', () => {
-  const e = depuisTexte({ enCours: ['carre2.0', 'barre3.0', 't.0'], suivantes: ['bloc.0', 'barre2.0', 'z.0'], reserve: avec({ supprimer: 2 }) })
+  const e = depuisTexte({ enCours: ['carre2.0', 'barre3.0', 't.0'], suivantes: ['bloc.0', 'barre2.0', 'z.0'], reserve: avec({ supprimer: 2 }), niveau: 3 })
   const f = supprimerPiece(e, 1)
   assert.deepEqual(ids(f.enCours), ['carre2.0', null, 't.0'])
   assert.deepEqual(ids(f.suivantes), ['bloc.0', 'barre2.0', 'z.0'])
@@ -168,7 +168,7 @@ test('supprimer : un tour finit quand les trois pièces sont posées ou retirée
 })
 
 test('supprimer : refusé sans rien changer ni consommer, sans bonus ou sans pièce à cette place', () => {
-  const e = depuisTexte({ enCours: ['carre2.0', null, 't.0'], reserve: avec({ supprimer: 1 }) })
+  const e = depuisTexte({ enCours: ['carre2.0', null, 't.0'], reserve: avec({ supprimer: 1 }), niveau: 3 })
   assert.equal(supprimerPiece(e, 1), null)
   assert.equal(supprimerPiece(e, 3), null)
   assert.equal(supprimerPiece(e, -1), null)
@@ -273,8 +273,10 @@ test('changer : la garantie de pose tient (main puis aperçu), à chaque niveau,
         const c = changerPieces(e)
         const main = c.enCours.filter(Boolean)
         assert.equal(main.length, e.enCours.filter(Boolean).length)
-        assert.ok(suite(grilleDe(c), [ids(main), ids(c.suivantes)]),
-          `niveau ${niveau}, partie ${p}, coup ${i} : ${ids(main)} puis ${ids(c.suivantes)}`)
+        // Aux niveaux 1 et 2 des places de l'aperçu peuvent être déjà posées (BS58) : elles ne comptent pas.
+        const apercu = c.suivantes.filter(Boolean)
+        assert.ok(suite(grilleDe(c), [ids(main), ids(apercu)]),
+          `niveau ${niveau}, partie ${p}, coup ${i} : ${ids(main)} puis ${ids(apercu)}`)
         verifies++
         e = coupAuHasard(e, alea)
       }
@@ -397,7 +399,7 @@ test('annuler : refusé sans coup à annuler (début de partie), sans bonus, ou 
 // --- Fin de partie avec bonus -------------------------------------------------------
 
 const bloquee3 = (reserve, enCours = ['carre2.0', 'barre2.0', 'barre2.1']) =>
-  depuisTexte({ rangees: DAMIER, enCours, suivantes: ['bloc.0', 'bloc.0', 'bloc.0'], reserve: avec(reserve) })
+  depuisTexte({ rangees: DAMIER, enCours, suivantes: ['bloc.0', 'bloc.0', 'bloc.0'], reserve: avec(reserve), niveau: 3 })
 
 test('fin de partie : bloquée sans bonus, c\'est perdu', () => {
   const e = bloquee3({})
@@ -418,7 +420,7 @@ test('fin de partie : tant qu\'un bonus qui peut aider existe, la partie continu
   // Annuler aide s'il y a un coup à annuler, pas sinon.
   const sans = bloquee3({ annuler: 1 })
   assert.equal(perdue(sans), true)
-  const avantPose = depuisTexte({ rangees: DAMIER.map((r, l) => (l === 0 ? '..#.#.#.#.' : r)), enCours: ['bloc.0', 'barre2.0', null], suivantes: ['bloc.0', 'bloc.0', 'bloc.0'], reserve: avec({ annuler: 1 }) })
+  const avantPose = depuisTexte({ rangees: DAMIER.map((r, l) => (l === 0 ? '..#.#.#.#.' : r)), enCours: ['bloc.0', 'barre2.0', null], suivantes: ['bloc.0', 'bloc.0', 'bloc.0'], reserve: avec({ annuler: 1 }), niveau: 3 })
   const pose = poser(avantPose, 0, 0, 0)
   assert.equal(pose.dernierCoup.bloquee, true)
   assert.equal(pose.dernierCoup.perdue, false)
@@ -427,28 +429,28 @@ test('fin de partie : tant qu\'un bonus qui peut aider existe, la partie continu
   const apres = annulerCoup(pose)
   assert.equal(bloquee(apres), false)
   // Sans le bonus d'annuler, le même coup perd la partie.
-  const sansBonus = poser(depuisTexte({ rangees: DAMIER.map((r, l) => (l === 0 ? '..#.#.#.#.' : r)), enCours: ['bloc.0', 'barre2.0', null], suivantes: ['bloc.0', 'bloc.0', 'bloc.0'] }), 0, 0, 0)
+  const sansBonus = poser(depuisTexte({ rangees: DAMIER.map((r, l) => (l === 0 ? '..#.#.#.#.' : r)), enCours: ['bloc.0', 'barre2.0', null], suivantes: ['bloc.0', 'bloc.0', 'bloc.0'], niveau: 3 }), 0, 0, 0)
   assert.equal(sansBonus.dernierCoup.perdue, true)
 })
 
 test('fin de partie : tourner aide seulement si une orientation atteignable d\'une pièce se pose', () => {
   // Une colonne libre : la barre debout y entre, pas la barre couchée.
   const colonne = Array.from({ length: 10 }, () => '.#########')
-  const couchee = depuisTexte({ rangees: colonne, enCours: ['barre3.0', null, null], reserve: avec({ tourner: 1 }) })
+  const couchee = depuisTexte({ rangees: colonne, enCours: ['barre3.0', null, null], reserve: avec({ tourner: 1 }), niveau: 3 })
   assert.equal(bloquee(couchee), true)
   assert.deepEqual(bonusUtiles(couchee), ['tourner'])
   assert.equal(perdue(couchee), false)
   const tournee = tournerPiece(couchee, 0)
   assert.equal(bloquee(tournee), false)
-  assert.equal(perdue(depuisTexte({ rangees: colonne, enCours: ['barre3.0', null, null] })), true)
+  assert.equal(perdue(depuisTexte({ rangees: colonne, enCours: ['barre3.0', null, null], niveau: 3 })), true)
   // Une pièce qui n'a qu'une orientation ne profite pas du bonus.
-  const carre = depuisTexte({ rangees: colonne, enCours: ['carre3.0', null, null], reserve: avec({ tourner: 4 }) })
+  const carre = depuisTexte({ rangees: colonne, enCours: ['carre3.0', null, null], reserve: avec({ tourner: 4 }), niveau: 3 })
   assert.equal(perdue(carre), true)
   // Une orientation à deux quarts de tour : il faut deux bonus pour l'atteindre.
   const demi = piece(pieceSuivante(pieceSuivante('coin.0')))
   const libres = demi.cases.map((c) => `${c.ligne},${c.col}`)
   const rangees = Array.from({ length: 10 }, (_, l) => [...'##########'].map((_, k) => (libres.includes(`${l},${k}`) ? '.' : '#')).join(''))
-  const deux = (n) => depuisTexte({ rangees, enCours: ['coin.0', null, null], reserve: avec({ tourner: n }) })
+  const deux = (n) => depuisTexte({ rangees, enCours: ['coin.0', null, null], reserve: avec({ tourner: n }), niveau: 3 })
   assert.equal(bloquee(deux(1)), true)
   assert.equal(perdue(deux(1)), true)
   assert.equal(perdue(deux(2)), false)

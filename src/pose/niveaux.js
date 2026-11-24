@@ -35,6 +35,11 @@ export const POIDS_NIVEAUX = Object.freeze([
 // pièces qui comblent les espaces libres et finissent des lignes. Le seul endroit où changer ce seuil.
 export const NIVEAU_DIFFICILE = 7
 
+// Le dernier niveau où la future main (l'aperçu) se joue aussi (BS58) : jusqu'à lui, les six pièces
+// sont posables à la fois, dans l'ordre qu'on veut ; au-dessus, seule la main en cours l'est et l'aperçu
+// ne fait que se montrer. Le seul endroit où changer ce seuil.
+export const NIVEAU_APERCU_JOUABLE = 2
+
 // La force de l'aide au tirage : 1 au niveau 1, qui s'estompe d'un niveau à l'autre, 0 dès
 // le niveau difficile (pas de marche brutale).
 export const aideDuNiveau = (niveau) => (niveau >= NIVEAU_DIFFICILE ? 0 : (NIVEAU_DIFFICILE - niveau) / (NIVEAU_DIFFICILE - NIVEAU_MIN))

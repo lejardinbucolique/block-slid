@@ -518,7 +518,10 @@
 }
 #pose-main { height: var(--haut-main); }
 #pose-apercu { height: var(--haut-apercu); opacity: .85; }
-#pose-main * { touch-action: none; }
+#pose-main *,
+#pose-apercu * { touch-action: none; }
+/* Aux niveaux 1 et 2 l'aperçu se joue (BS58) : ses pièces, plus grandes, se prennent comme celles de la main. */
+#pose.apercu-jouable #pose-apercu { opacity: 1; }
 
 #pose .pose-emplacement {
   flex: 1;
@@ -529,6 +532,7 @@
   cursor: grab;
 }
 #pose .pose-emplacement.pose-petit { cursor: default; }
+#pose .pose-emplacement.pose-petit.jouable { cursor: grab; }
 #pose .pose-emplacement.vide { cursor: default; }
 
 #pose .pose-piece { display: grid; }

@@ -15,6 +15,14 @@
 // (sa couleur est alors la première). Quand les trois sont
 // posées, l'aperçu passe en main et un nouvel aperçu est tiré par reglages.tirage.
 //
+// La future main se joue aussi aux niveaux 1 et 2 (BS58, niveaux.js : NIVEAU_APERCU_JOUABLE) : une
+// pièce se désigne alors par sa place `index`, de 0 à 2 pour la main, de 3 à 5 pour l'aperçu
+// (pieceA, indicesEnJeu). Une pièce posée, ou retirée, de l'aperçu y laisse une place à null. Quand
+// la main est finie, l'aperçu passe en main tel qu'il est, ses places vides comprises : la main
+// compte alors moins de trois pièces, et celles déjà posées ne reviennent pas. Si les trois de
+// l'aperçu étaient déjà posées, la main est un tirage neuf sur la grille réelle. Le niveau décide à
+// chaque appel : le changer fait jouer l'aperçu, ou non, tout de suite, sans toucher aux pièces.
+//
 // Un coup rend, dans dernierCoup, de quoi animer et compter : cases posées, lignes
 // et colonnes effacées, cases disparues, points, grille vidée, rang dans la série.
 //
@@ -49,7 +57,7 @@
 
 import { REGLAGES } from './reglages.js'
 import { piece, pieceSuivante } from './pieces.js'
-import { NIVEAU_PAR_DEFAUT, NIVEAU_DIFFICILE, niveauValide, aideDuNiveau, poidsDesPieces } from './niveaux.js'
+import { NIVEAU_PAR_DEFAUT, NIVEAU_DIFFICILE, NIVEAU_APERCU_JOUABLE, niveauValide, aideDuNiveau, poidsDesPieces } from './niveaux.js'
 import { SORTES, sorteValide, reserveVide, ajouterBonus, retirerBonus, lireReserve } from './bonus.js'
 import { AU_CHOIX, nouveauDefi, compteSurprise, gainsDeCoup } from './gains.js'
 import { LISTE, couleursDepart, couleursSuivantes, couleursDePieces, lireCouleurs } from './couleurs.js'
@@ -108,11 +116,40 @@ function etatVide(reglages, graine, niveauDemande) {
 
 // --- Jouer ----------------------------------------------------------------
 
-// Pose la pièce en main à la place `index`, son coin haut gauche en (ligne, col).
+// L'aperçu se joue-t-il à ce niveau ? Oui aux niveaux 1 et 2 (BS58).
+export const apercuJouable = (etat) => etat.niveau <= NIVEAU_APERCU_JOUABLE
+
+// La pièce à la place `index` : de 0 à 2 la main, de 3 à 5 l'aperçu quand il se joue ; null si la
+// place est vide, hors des six, ou si c'est une place de l'aperçu qui ne se joue pas.
+export function pieceA(etat, index) {
+  if (!Number.isInteger(index) || index < 0) return null
+  const n = etat.reglages.piecesParTour
+  if (index < n) return etat.enCours[index] ?? null
+  if (index < 2 * n && apercuJouable(etat)) return etat.suivantes[index - n] ?? null
+  return null
+}
+
+// Les places des pièces qu'on peut poser ou viser d'un bonus : celles de la main qui n'est pas
+// finie, et celles de l'aperçu quand il se joue.
+export function indicesEnJeu(etat) {
+  const n = etat.reglages.piecesParTour
+  const places = []
+  for (let i = 0; i < 2 * n; i++) if (pieceA(etat, i)) places.push(i)
+  return places
+}
+
+// Vide la place `index` de l'état `e` (copie), ou y met `pieceNeuve`.
+function ranger(e, index, pieceNeuve = null) {
+  const n = e.reglages.piecesParTour
+  if (index < n) e.enCours[index] = pieceNeuve
+  else e.suivantes[index - n] = pieceNeuve
+}
+
+// Pose la pièce à la place `index` (voir pieceA), son coin haut gauche en (ligne, col).
 // Refusée (null) si la place est vide, si la pièce sort de la grille ou recouvre
 // une case occupée.
 export function poser(etat, index, ligne, col) {
-  const enMain = etat.enCours[index]
+  const enMain = pieceA(etat, index)
   if (!enMain || !tient(etat, enMain.id, ligne, col)) return null
   const p = piece(enMain.id)
   const { reglages } = etat
@@ -143,7 +180,7 @@ export function poser(etat, index, ligne, col) {
   e.score += points
   e.coups += 1
 
-  e.enCours[index] = null
+  ranger(e, index)
   const grilleVidee = e.grille.every((r) => r.every((v) => v === null))
   const { gains, defiFini, surprise } = gagner(e, enMain, { lignes, colonnes, casesDisparues, ligne, col, grilleVidee })
   e.annulation.gagnes = appliquerGains(e, gains)
@@ -156,6 +193,8 @@ export function poser(etat, index, ligne, col) {
 
   e.dernierCoup = {
     index,
+    // Posée depuis l'aperçu (niveaux 1 et 2).
+    apercu: index >= reglages.piecesParTour,
     piece: enMain.id,
     ligne,
     col,
@@ -190,14 +229,18 @@ export function poser(etat, index, ligne, col) {
 // une ligne ou une colonne sur la grille réelle alors qu'une pièce de la table le pourrait, la main
 // est tirée de nouveau pour en contenir une. La chance en est pleine au niveau 1 et s'estompe jusqu'au
 // niveau 7 (aideDuNiveau). La main impossible à poser est remplacée dans les mêmes conditions de chance.
+//
+// Aperçu joué en avance (BS58) : la main qui arrive peut compter moins de trois pièces (places de
+// l'aperçu déjà posées). Si elle n'en compte aucune, elle est un tirage neuf, garanti comme les autres.
 function finDeTour(e) {
   if (!e.enCours.every((x) => x === null)) return false
   e.enCours = e.suivantes
-  const impossible = mainImpossible(e)
-  const sansEffacement = !impossible && mainSansEffacement(e)
-  if (impossible || sansEffacement) {
+  const vide = e.enCours.every((x) => x === null)
+  const impossible = !vide && mainImpossible(e)
+  const sansEffacement = !vide && !impossible && mainSansEffacement(e)
+  if (vide || impossible || sansEffacement) {
     const exigerEfface = e.niveau < NIVEAU_DIFFICILE && aleatoire(e) < aideDuNiveau(e.niveau)
-    if (impossible || exigerEfface) {
+    if (vide || impossible || exigerEfface) {
       e.enCours = []
       e.suivantes = []
       e.enCours = tirer(e, e.reglages.piecesParTour, exigerEfface)
@@ -211,7 +254,7 @@ function finDeTour(e) {
 function mainImpossible(e) {
   const { mainPosable } = e.reglages
   if (e.niveau >= NIVEAU_DIFFICILE || typeof mainPosable !== 'function') return false
-  const { posable, epuise } = mainPosable(e.grille, e.enCours.map((x) => x.id))
+  const { posable, epuise } = mainPosable(e.grille, e.enCours.filter(Boolean).map((x) => x.id))
   return !posable && !epuise
 }
 
@@ -221,7 +264,7 @@ function mainSansEffacement(e) {
   const { mainEfface } = e.reglages
   if (e.niveau >= NIVEAU_DIFFICILE || typeof mainEfface !== 'function') return false
   const possibles = poidsDesPieces(e.niveau).filter((q) => q.poids > 0).map((q) => q.id)
-  const { efface, possible } = mainEfface(e.grille, e.enCours.map((x) => x.id), possibles)
+  const { efface, possible } = mainEfface(e.grille, e.enCours.filter(Boolean).map((x) => x.id), possibles)
   return !efface && possible
 }
 
@@ -231,7 +274,7 @@ function instantane(etat) {
   return {
     grille: etat.grille.map((r) => [...r]),
     enCours: etat.enCours.map((x) => x && { ...x }),
-    suivantes: etat.suivantes.map((x) => ({ ...x })),
+    suivantes: etat.suivantes.map((x) => x && { ...x }),
     score: etat.score,
     coups: etat.coups,
     tours: etat.tours,
@@ -250,25 +293,26 @@ function instantane(etat) {
   }
 }
 
-// La pièce en main à la place `index` peut-elle se poser en (ligne, col) ?
+// La pièce à la place `index` peut-elle se poser en (ligne, col) ?
 export function peutPoser(etat, index, ligne, col) {
-  const enMain = etat.enCours[index]
+  const enMain = pieceA(etat, index)
   return Boolean(enMain) && tient(etat, enMain.id, ligne, col)
 }
 
-// Toutes les places { ligne, col } où la pièce en main à `index` peut se poser.
+// Toutes les places { ligne, col } où la pièce à `index` peut se poser.
 export function positionsPossibles(etat, index) {
-  const enMain = etat.enCours[index]
+  const enMain = pieceA(etat, index)
   if (!enMain) return []
   return positionsDe(etat, enMain.id)
 }
 
-// Les places (index) des pièces en main qui tiennent quelque part.
+// Les places (index) des pièces qu'on peut poser (main, et aperçu aux niveaux 1 et 2) qui tiennent
+// quelque part.
 export function piecesJouables(etat) {
-  return etat.enCours.flatMap((x, i) => (x && positionsDe(etat, x.id, 1).length > 0 ? [i] : []))
+  return indicesEnJeu(etat).filter((i) => positionsDe(etat, pieceA(etat, i).id, 1).length > 0)
 }
 
-// Aucune pièce en main ne tient nulle part.
+// Aucune pièce qu'on peut poser ne tient nulle part.
 export const bloquee = (etat) => piecesJouables(etat).length === 0
 
 // Où une pièce du catalogue tiendrait sur la grille de l'état ; au plus `max` places.
@@ -323,7 +367,7 @@ export function choisirBonus(etat, sorte) {
 // possible) ? `index` est la place de la pièce visée, pour supprimer et tourner.
 export function peutUtiliser(etat, sorte, index) {
   if (!(etat.reserve[sorte] > 0)) return false
-  const enMain = etat.enCours[index]
+  const enMain = pieceA(etat, index)
   switch (sorte) {
     case 'supprimer': return Boolean(enMain)
     case 'tourner': return Boolean(enMain) && pieceSuivante(enMain.id) !== enMain.id
@@ -344,13 +388,13 @@ function employer(etat, sorte, index) {
   return e
 }
 
-// Supprimer : la pièce en main à la place `index` disparaît, le tour continue avec les
-// autres ; il finit quand les trois sont posées ou retirées.
+// Supprimer : la pièce à la place `index` (main, ou aperçu aux niveaux 1 et 2) disparaît, le tour
+// continue avec les autres ; il finit quand les trois de la main sont posées ou retirées.
 export function supprimerPiece(etat, index) {
   const e = employer(etat, 'supprimer', index)
   if (!e) return null
-  const retiree = e.enCours[index].id
-  e.enCours[index] = null
+  const retiree = pieceA(e, index).id
+  ranger(e, index)
   const nouveauTour = finDeTour(e)
   e.dernierBonus = { sorte: 'supprimer', index, piece: retiree, nouveauTour }
   return e
@@ -361,17 +405,18 @@ export function supprimerPiece(etat, index) {
 export function tournerPiece(etat, index) {
   const e = employer(etat, 'tourner', index)
   if (!e) return null
-  const avant = e.enCours[index]
-  e.enCours[index] = { ...avant, id: pieceSuivante(avant.id) }
+  const avant = pieceA(e, index)
+  const tournee = { ...avant, id: pieceSuivante(avant.id) }
   if (avant.couleurs) {
-    e.enCours[index].couleurs = couleursTournees(avant)
+    tournee.couleurs = couleursTournees(avant)
     // La couleur d'une pièce mélangée est celle de sa première case.
-    e.enCours[index].couleur = e.enCours[index].couleurs[0]
+    tournee.couleur = tournee.couleurs[0]
   }
   // La case surprise tourne avec la pièce : un quart de tour horaire envoie (l, c) en
   // (c, hauteur - 1 - l), comme le catalogue (pieces.js).
-  if (avant.surprise) e.enCours[index].surprise = { ligne: avant.surprise.col, col: piece(avant.id).hauteur - 1 - avant.surprise.ligne }
-  e.dernierBonus = { sorte: 'tourner', index, avant: avant.id, apres: e.enCours[index].id }
+  if (avant.surprise) tournee.surprise = { ligne: avant.surprise.col, col: piece(avant.id).hauteur - 1 - avant.surprise.ligne }
+  ranger(e, index, tournee)
+  e.dernierBonus = { sorte: 'tourner', index, avant: avant.id, apres: tournee.id }
   return e
 }
 
@@ -379,18 +424,21 @@ export function tournerPiece(etat, index) {
 // et en même nombre, par un tirage neuf ; l'aperçu est tiré de nouveau avec elles. Le
 // tirage garanti s'applique comme au début d'une partie : les pièces neuves se posent,
 // puis celles de l'aperçu. Retirer aussi l'aperçu est la manière la plus simple de
-// tenir la garantie, et l'aperçu montré reste la vérité.
+// tenir la garantie, et l'aperçu montré reste la vérité. Les places de l'aperçu déjà posées
+// (niveaux 1 et 2, BS58) restent vides : changer ne rend aucune pièce posée.
 export function changerPieces(etat) {
   const e = employer(etat, 'changer')
   if (!e) return null
   const anciennes = e.enCours.map((x) => x && x.id)
   const places = e.enCours.flatMap((x, i) => (x ? [i] : []))
+  const placesApercu = e.suivantes.flatMap((x, i) => (x ? [i] : []))
   e.enCours = e.enCours.map(() => null)
   // L'aperçu va être retiré aussi : une surprise qu'il portait ne compte plus.
-  e.suivantes = []
+  e.suivantes = e.suivantes.map(() => null)
   const neuves = tirer(e, places.length)
   places.forEach((place, i) => { e.enCours[place] = neuves[i] })
-  e.suivantes = tirer(e, e.reglages.piecesParTour)
+  const neuvesApercu = placesApercu.length > 0 ? tirer(e, placesApercu.length) : []
+  placesApercu.forEach((place, i) => { e.suivantes[place] = neuvesApercu[i] })
   e.dernierBonus = { sorte: 'changer', anciennes, neuves: e.enCours.map((x) => x && x.id) }
   return e
 }
@@ -421,7 +469,7 @@ export function annulerCoup(etat) {
   const avant = etat.annulation
   e.grille = avant.grille.map((r) => [...r])
   e.enCours = avant.enCours.map((x) => x && copiePiece(x))
-  e.suivantes = avant.suivantes.map(copiePiece)
+  e.suivantes = avant.suivantes.map((x) => x && copiePiece(x))
   e.score = avant.score
   e.coups = avant.coups
   e.tours = avant.tours
@@ -446,12 +494,12 @@ export function annulerCoup(etat) {
 // pièces en main se pose dans une orientation que la réserve de « tourner » permet
 // d'atteindre (un bonus par quart de tour).
 export function bonusUtiles(etat) {
-  return SORTES.filter((sorte) => (sorte === 'tourner' ? tournerUtile(etat) : peutUtiliser(etat, sorte, etat.enCours.findIndex(Boolean))))
+  return SORTES.filter((sorte) => (sorte === 'tourner' ? tournerUtile(etat) : peutUtiliser(etat, sorte, indicesEnJeu(etat)[0])))
 }
 
 function tournerUtile(etat) {
-  return etat.enCours.some((x) => {
-    if (!x) return false
+  return indicesEnJeu(etat).some((index) => {
+    const x = pieceA(etat, index)
     let id = x.id
     for (let i = 0; i < etat.reserve.tourner; i++) {
       id = pieceSuivante(id)
@@ -655,7 +703,8 @@ function lireInstantane(d, reglages) {
   if (!Array.isArray(d.enCours) || d.enCours.length !== piecesParTour) return null
   if (!Array.isArray(d.suivantes) || d.suivantes.length !== piecesParTour) return null
   const enCours = d.enCours.map((x) => (x === null ? null : lirePiece(x)))
-  const suivantes = d.suivantes.map(lirePiece)
+  // Une place de l'aperçu déjà posée (niveaux 1 et 2, BS58) est null.
+  const suivantes = d.suivantes.map((x) => (x === null ? null : lirePiece(x)))
   if (enCours.includes(undefined) || suivantes.includes(undefined)) return null
   // Un tour dont les trois pièces sont posées a déjà laissé place au suivant.
   if (enCours.every((x) => x === null)) return null
@@ -798,7 +847,7 @@ function cloner(etat) {
     ...etat,
     grille: etat.grille.map((r) => [...r]),
     enCours: etat.enCours.map((x) => x && copiePiece(x)),
-    suivantes: etat.suivantes.map(copiePiece),
+    suivantes: etat.suivantes.map((x) => x && copiePiece(x)),
     reserve: { ...etat.reserve },
     couleurs: { ...etat.couleurs },
   }

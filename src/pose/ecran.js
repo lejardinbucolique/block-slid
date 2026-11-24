@@ -26,6 +26,9 @@ import {
   poser,
   positionsPossibles,
   piecesJouables,
+  apercuJouable,
+  pieceA,
+  indicesEnJeu,
   bloquee,
   perdue,
   choisirBonus,
@@ -71,6 +74,8 @@ import { STYLE_UNI, stylesDebloques, nouveauxStyles, styleAutorise, resumeStyles
 // l'aperçu, plus petit. Les rangées sont assez hautes pour la pièce la plus haute du catalogue.
 const ECHELLE_MAIN = 0.5
 const ECHELLE_APERCU = 0.3
+// Aux niveaux où l'aperçu se joue (BS58), ses pièces se prennent au doigt : elles sont plus grandes.
+const ECHELLE_APERCU_JOUABLE = 0.4
 const RANGEES_MAX = LIGNES_MAX_PAR_COUP
 const MARGE_LATERALE_PX = 8
 const CADRE_PX = 5
@@ -109,7 +114,7 @@ const BONUS = Object.freeze({
   },
   changer: {
     nom: 'Changer',
-    titre: 'Changer les trois pièces',
+    titre: 'Changer les pièces',
     icone: '<path d="M4 8h13M14 5l3 3-3 3"/><path d="M20 16H7M10 13l-3 3 3 3"/>',
   },
   annuler: {
@@ -301,6 +306,8 @@ export async function demarrerJeu() {
   let minuteurMessage = null
   let minuteurDecor = null
   let cellule = 0
+  let apercuMesure = false // la mise en page est celle d'un aperçu qui se joue (plus grand) ou non
+  let echelleApercu = ECHELLE_APERCU
   let signatures = { main: [], apercu: [] }
   let premierAffichage = true
   let touchees = [] // les cases de la grille marquées par l'aperçu du coup
@@ -375,6 +382,8 @@ export async function demarrerJeu() {
     emplacements.push(slot)
     const petit = document.createElement('div')
     petit.className = 'pose-emplacement pose-petit'
+    // Les places de l'aperçu suivent celles de la main (moteur.js : pieceA), pour les niveaux où il se joue.
+    petit.dataset.index = String(REGLAGES.piecesParTour + i)
     apercuEl.append(petit)
     emplacementsApercu.push(petit)
   }
@@ -389,20 +398,22 @@ export async function demarrerJeu() {
     const ecart = px(cs.rowGap)
     // Six blocs l'un sous l'autre : en-tête, grille, pièces, aperçu, aide, bonus.
     const fixe = haut.offsetHeight + bonusEl.offsetHeight + aideEl.offsetHeight + 5 * ecart + 2 * CADRE_PX
+    apercuMesure = apercuJouable(etat)
+    echelleApercu = apercuMesure ? ECHELLE_APERCU_JOUABLE : ECHELLE_APERCU
     cellule = tailleCellule({
       largeur: largeur - 2 * CADRE_PX,
       hauteur,
       fixe,
       colonnes: REGLAGES.colonnes,
       lignes: REGLAGES.lignes,
-      piecesEnCases: RANGEES_MAX * (ECHELLE_MAIN + ECHELLE_APERCU),
+      piecesEnCases: RANGEES_MAX * (ECHELLE_MAIN + echelleApercu),
     })
     const fixer = (nom, valeur) => racine.style.setProperty(nom, valeur)
     fixer('--cell', `${cellule}px`)
     fixer('--cm', `${cellule * ECHELLE_MAIN}px`)
-    fixer('--ca', `${cellule * ECHELLE_APERCU}px`)
+    fixer('--ca', `${cellule * echelleApercu}px`)
     fixer('--haut-main', `${cellule * ECHELLE_MAIN * RANGEES_MAX}px`)
-    fixer('--haut-apercu', `${cellule * ECHELLE_APERCU * RANGEES_MAX}px`)
+    fixer('--haut-apercu', `${cellule * echelleApercu * RANGEES_MAX}px`)
     fixer('--largeur-grille', `${cellule * REGLAGES.colonnes}px`)
     fixer('--cols', String(REGLAGES.colonnes)) // les textures étalent leur animation sur une ligne de cette longueur
   }
@@ -484,7 +495,7 @@ export async function demarrerJeu() {
 
   // Un bonus est utilisable s'il en reste en réserve et si son effet est possible.
   function utilisable(sorte) {
-    if (sorte === 'supprimer' || sorte === 'tourner') return etat.enCours.some((x, i) => x && peutUtiliser(etat, sorte, i))
+    if (sorte === 'supprimer' || sorte === 'tourner') return indicesEnJeu(etat).some((i) => peutUtiliser(etat, sorte, i))
     return peutUtiliser(etat, sorte)
   }
 
@@ -538,7 +549,12 @@ export async function demarrerJeu() {
   // Les pièces de la main et de l'aperçu. Une place dont la pièce n'a pas changé garde son
   // élément (et son animation en cours) ; une pièce nouvelle entre d'un petit saut.
   function dessinerPieces() {
+    // L'aperçu change de taille avec le niveau (BS58) : la mise en page suit tout de suite.
+    if (apercuMesure !== apercuJouable(etat)) mesurer()
     const jouables = new Set(piecesJouables(etat))
+    const decalage = { main: 0, apercu: REGLAGES.piecesParTour }
+    const enJeu = apercuJouable(etat)
+    racine.classList.toggle('apercu-jouable', enJeu)
     const nouvelles = { main: etat.enCours.map(signature), apercu: etat.suivantes.map(signature) }
     const rangees = [
       ['main', emplacements, etat.enCours, '--cm'],
@@ -554,14 +570,18 @@ export async function demarrerJeu() {
             slot.append(elementPiece(x, taille))
             if (!premierAffichage && !sansMouvement()) {
               void slot.offsetWidth
-              const tourne = nom === 'main' && etat.dernierBonus?.sorte === 'tourner' && etat.dernierBonus.index === i
+              const tourne = etat.dernierBonus?.sorte === 'tourner' && etat.dernierBonus.index === decalage[nom] + i
               slot.classList.add(tourne ? 'tourne' : 'entre')
             }
           }
         }
+        // Une pièce de l'aperçu qui ne se joue pas (niveau 3 et plus) ne se grise ni ne se vise.
+        const place = decalage[nom] + i
+        const enMain = Boolean(x) && (nom === 'main' || enJeu)
         slot.classList.toggle('vide', !x)
-        slot.classList.toggle('bloquee', nom === 'main' && Boolean(x) && !jouables.has(i))
-        slot.classList.toggle('visable', nom === 'main' && Boolean(x) && visee !== null && peutUtiliser(etat, visee, i))
+        slot.classList.toggle('jouable', nom === 'apercu' && enMain)
+        slot.classList.toggle('bloquee', enMain && !jouables.has(place))
+        slot.classList.toggle('visable', enMain && visee !== null && peutUtiliser(etat, visee, place))
       })
     }
     signatures = nouvelles
@@ -669,7 +689,8 @@ export async function demarrerJeu() {
     if (dialogueOuvert()) return
     if (lecture) conclure()
     const index = Number(slot.dataset.index)
-    const enMain = etat.enCours[index]
+    // La main, et l'aperçu aux niveaux où il se joue (BS58) ; au-delà il ne fait que se montrer.
+    const enMain = pieceA(etat, index)
     if (!enMain) return
     e.preventDefault()
     if (visee) {
@@ -686,12 +707,15 @@ export async function demarrerJeu() {
     const source = slot.querySelector('.pose-piece')
     const depart = source.getBoundingClientRect()
     const fantome = elementPiece(enMain, '--cell')
+    // La pièce part à la taille de sa rangée : celle de la main, ou celle de l'aperçu.
+    const echelle = slot.classList.contains('pose-petit') ? echelleApercu : ECHELLE_MAIN
     fantome.classList.add('pose-fantome', 'vole')
     fantome.style.translate = `${depart.left}px ${depart.top}px`
-    fantome.style.scale = String(ECHELLE_MAIN)
+    fantome.style.scale = String(echelle)
     racine.append(fantome)
-    try { mainEl.setPointerCapture(e.pointerId) } catch { /* souris sortie de la fenêtre : sans importance */ }
-    glisse = { pointeur: e.pointerId, index, enMain, slot, fantome, cle: null, apercu: null }
+    const zone = e.currentTarget
+    try { zone.setPointerCapture(e.pointerId) } catch { /* souris sortie de la fenêtre : sans importance */ }
+    glisse = { pointeur: e.pointerId, index, enMain, slot, fantome, zone, echelle, cle: null, apercu: null }
     preparerOmbre(enMain)
     void fantome.offsetWidth // le départ est posé : la suite s'anime depuis lui
     slot.classList.add('leve')
@@ -717,7 +741,7 @@ export async function demarrerJeu() {
     if (!glisse || e.pointerId !== glisse.pointeur) return
     const g = glisse
     const cible = viser(e)
-    try { mainEl.releasePointerCapture(e.pointerId) } catch { /* déjà relâché */ }
+    try { g.zone.releasePointerCapture(e.pointerId) } catch { /* déjà relâché */ }
     glisse = null
     clearTimeout(g.minuteurVol)
     const p = piece(g.enMain.id)
@@ -755,7 +779,7 @@ export async function demarrerJeu() {
     g.fantome.classList.remove('vole', 'invalide')
     g.fantome.classList.add('retour')
     g.fantome.style.translate = `${cible.left}px ${cible.top}px`
-    g.fantome.style.scale = String(ECHELLE_MAIN)
+    g.fantome.style.scale = String(g.echelle)
     setTimeout(termine, DUREE_RETOUR_MS)
   }
 
@@ -766,11 +790,14 @@ export async function demarrerJeu() {
     retour(g)
   }
 
-  mainEl.addEventListener('pointerdown', debutGlisse)
-  mainEl.addEventListener('pointermove', mouvementGlisse)
-  mainEl.addEventListener('pointerup', finGlisse)
-  mainEl.addEventListener('pointercancel', annulerGlisse)
-  mainEl.addEventListener('lostpointercapture', annulerGlisse)
+  // La main et l'aperçu se prennent de la même façon (l'aperçu ne répond qu'aux niveaux où il se joue).
+  for (const zone of [mainEl, apercuEl]) {
+    zone.addEventListener('pointerdown', debutGlisse)
+    zone.addEventListener('pointermove', mouvementGlisse)
+    zone.addEventListener('pointerup', finGlisse)
+    zone.addEventListener('pointercancel', annulerGlisse)
+    zone.addEventListener('lostpointercapture', annulerGlisse)
+  }
   racine.addEventListener('contextmenu', (e) => e.preventDefault())
 
   // --- Un coup, pas à pas -----------------------------------------------------------------
@@ -899,7 +926,7 @@ export async function demarrerJeu() {
     if (coup.surprise === 'perdue') return avant.surprise
     const s = avant.surprise
     if (s && coup.casesDisparues.some((c) => c.ligne === s.ligne && c.col === s.col)) return s
-    const porteuse = avant.enCours[coup.index]?.surprise
+    const porteuse = pieceA(avant, coup.index)?.surprise
     return porteuse ? { ligne: coup.ligne + porteuse.ligne, col: coup.col + porteuse.col } : null
   }
 
@@ -1137,6 +1164,12 @@ export async function demarrerJeu() {
     if (changee) etat = changee
     garder()
     afficherNiveau()
+    // L'aperçu se joue, ou non, tout de suite (BS58) : les pièces, les bonus et l'aide se redessinent.
+    visee = null
+    dessinerBonus()
+    dessinerPieces()
+    dessinerAide()
+    verifierFin()
   }
 
   curseurNiveau.addEventListener('input', () => changerNiveau(Number(curseurNiveau.value)))
