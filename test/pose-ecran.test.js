@@ -113,12 +113,11 @@ test('pose.css : le décor est en variables sur #pose (fond, grille, cadre, case
   assert.match(css, /#pose \{[^}]*background: var\(--pose-fond\)/)
 })
 
-test('pose.css : le mouvement réduit garde l\'élévation, sans animation', () => {
+test('pose.css : le mouvement réduit coupe aussi les transitions et animations des bandes de l\'aperçu', () => {
   const css = lire('src/pose/pose.css')
   assert.match(css, /prefers-reduced-motion: reduce/)
-  assert.match(css, /#pose \.pose-case\.eleve \{[^}]*transform: translateY/)
   const media = css.slice(css.indexOf('@media (prefers-reduced-motion'))
-  assert.doesNotMatch(media, /\.eleve/)
+  assert.match(media, /#pose \*, #pose \*::before, #pose \*::after/)
   assert.match(media, /transition-duration: \.01s !important/)
   assert.match(media, /animation-duration: \.01s !important/)
 })

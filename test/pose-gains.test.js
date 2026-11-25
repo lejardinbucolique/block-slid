@@ -22,6 +22,7 @@ import {
   pieceSuivante,
   nouveauDefi,
   compteSurprise,
+  duNiveau,
   pointsMaxParPose,
   pointsMaxEnCoups,
   nouvellePartie,
@@ -74,17 +75,34 @@ function grillePourEffacer(id, lignes, colonnes) {
 
 // --- Les conditions et leur faisabilité ------------------------------------------
 
-test('constantes : seuils de lignes dans ce que le catalogue permet, table de défis complète', () => {
-  assert.ok(GAINS.lignesPourAnnuler <= LIGNES_MAX_PAR_COUP && GAINS.lignesPourAnnuler <= COLONNES_MAX_PAR_COUP,
-    'jamais plus de lignes (colonnes) d\'un coup que la plus grande hauteur (largeur) d\'une pièce')
-  assert.equal(GAINS.lignesPourAnnuler, 5)
-  assert.ok(GAINS.croisementLignes <= LIGNES_MAX_PAR_COUP && GAINS.croisementColonnes <= COLONNES_MAX_PAR_COUP)
-  assert.ok(CATALOGUE.some((p) => p.hauteur >= GAINS.croisementLignes && p.largeur >= GAINS.croisementColonnes),
-    '3 lignes et 2 colonnes doivent être réalisables par une pièce du catalogue')
-  assert.equal(GAINS.defis.length, NIVEAU_MAX - NIVEAU_MIN + 1)
-  assert.equal(GAINS.surprise.compte.length, NIVEAU_MAX - NIVEAU_MIN + 1)
-  assert.equal(GAINS.palier, 50000)
+test('constantes : seuils de lignes dans ce que le catalogue permet, tables de dix niveaux', () => {
+  for (const niveau of NIVEAUX) {
+    const lignes = duNiveau(GAINS.lignesPourAnnuler, niveau)
+    assert.ok(lignes <= LIGNES_MAX_PAR_COUP && lignes <= COLONNES_MAX_PAR_COUP,
+      'jamais plus de lignes (colonnes) d\'un coup que la plus grande hauteur (largeur) d\'une pièce')
+    const [l, c] = [duNiveau(GAINS.croisementLignes, niveau), duNiveau(GAINS.croisementColonnes, niveau)]
+    assert.ok(l <= LIGNES_MAX_PAR_COUP && c <= COLONNES_MAX_PAR_COUP)
+    assert.ok(CATALOGUE.some((p) => p.hauteur >= l && p.largeur >= c), `${l} lignes et ${c} colonnes doivent être réalisables par une pièce du catalogue`)
+  }
+  assert.equal(duNiveau(GAINS.lignesPourAnnuler, NIVEAU_MAX), 5, 'au dernier niveau, 5 lignes d\'un coup')
+  for (const table of [GAINS.lignesPourAnnuler, GAINS.croisementLignes, GAINS.croisementColonnes, GAINS.defis, GAINS.surprise.compte, GAINS.palier]) {
+    assert.equal(table.length, NIVEAU_MAX - NIVEAU_MIN + 1)
+  }
+  assert.equal(duNiveau(GAINS.palier, 5), 50000)
+  assert.equal(duNiveau(7, 3), 7, 'un nombre vaut pour tous les niveaux')
   assert.equal(REGLAGES.gains, GAINS, 'les gains se règlent avec les autres réglages')
+})
+
+test('les conditions de bonus ne se relâchent jamais d\'un niveau au suivant (BS57)', () => {
+  const monte = (table, nom, sens = 1) => {
+    for (let i = 1; i < table.length; i++) assert.ok(sens * (table[i] - table[i - 1]) >= 0, `${nom} : niveau ${i + 1}`)
+    assert.ok(sens * (table[table.length - 1] - table[0]) > 0, `${nom} : du premier au dernier niveau`)
+  }
+  monte(GAINS.lignesPourAnnuler, 'lignes pour annuler')
+  monte(GAINS.croisementLignes, 'lignes du croisement')
+  monte(GAINS.croisementColonnes, 'colonnes du croisement')
+  monte(GAINS.palier, 'palier')
+  monte(GAINS.surprise.compte, 'compte de la surprise', -1)
 })
 
 test('5 lignes d\'un coup donnent annuler, et 5 colonnes de même (par symétrie)', () => {
@@ -102,34 +120,50 @@ test('5 lignes d\'un coup donnent annuler, et 5 colonnes de même (par symétrie
   assert.equal(c.reserve.annuler, 1)
 })
 
-test('4 lignes ne donnent rien : le seuil est bien 5', () => {
-  const e = poser(partie({ enCours: ['carre4.0', 'bloc.0', 'bloc.0'], rangees: grillePourEffacer('carre4.0', [0, 1, 2, 3], []) }), 0, 0, 0)
-  assert.equal(e.dernierCoup.lignes.length, 4)
-  assert.deepEqual(causes(e), [])
-  assert.deepEqual(e.reserve, reserveVide())
-})
-
-test('3 lignes ET 2 colonnes d\'un coup donnent tourner, avec chaque pièce du catalogue qui le permet', () => {
-  const candidates = CATALOGUE.filter((p) => p.hauteur >= 3 && p.largeur >= 2)
-  assert.ok(candidates.length >= 3, 'au moins le 4x4, le 3x3 et le grand L')
-  for (const p of candidates) {
-    const e = poser(partie({ enCours: [p.id, 'bloc.0', 'bloc.0'], rangees: grillePourEffacer(p.id, [0, 1, 2], [0, 1]) }), 0, 0, 0)
-    assert.ok(e.dernierCoup.lignes.length >= 3 && e.dernierCoup.colonnes.length >= 2, p.id)
-    assert.deepEqual(gain(e, 'croisement'), { cause: 'croisement', sorte: 'tourner', ajoute: true }, p.id)
-    assert.equal(e.reserve.tourner, 1, p.id)
+test('le seuil de lignes pour annuler suit le niveau : une ligne de moins ne donne rien', () => {
+  const lignes = (n) => Array.from({ length: n }, (_, i) => i)
+  for (const niveau of NIVEAUX) {
+    const seuil = duNiveau(GAINS.lignesPourAnnuler, niveau)
+    const id = seuil === 5 ? 'barre5.1' : 'carre4.0'
+    const avec = poser(partie({ niveau, enCours: [id, 'bloc.0', 'bloc.0'], rangees: grillePourEffacer(id, lignes(seuil), []) }), 0, 0, 0)
+    assert.equal(avec.dernierCoup.lignes.length, seuil)
+    assert.deepEqual(causes(avec), ['lignes'], `niveau ${niveau}`)
+    const sans = poser(partie({ niveau, enCours: [id, 'bloc.0', 'bloc.0'], rangees: grillePourEffacer(id, lignes(seuil - 1), []) }), 0, 0, 0)
+    assert.equal(sans.dernierCoup.lignes.length, seuil - 1)
+    assert.deepEqual(causes(sans), [], `niveau ${niveau}`)
+    assert.deepEqual(sans.reserve, reserveVide())
   }
-  for (const id of ['carre4.0', 'carre3.0', 'grandL.0']) assert.ok(candidates.some((p) => p.id === id), id)
 })
 
-test('3 lignes et 1 colonne, ou 2 lignes et 2 colonnes, ne donnent pas tourner', () => {
-  const a = poser(partie({ enCours: ['carre3.0', 'bloc.0', 'bloc.0'], rangees: grillePourEffacer('carre3.0', [0, 1, 2], [0]) }), 0, 0, 0)
-  assert.equal(a.dernierCoup.lignes.length, 3)
-  assert.equal(a.dernierCoup.colonnes.length, 1)
-  assert.deepEqual(causes(a), [])
-  const b = poser(partie({ enCours: ['carre2.0', 'bloc.0', 'bloc.0'], rangees: grillePourEffacer('carre2.0', [0, 1], [0, 1]) }), 0, 0, 0)
-  assert.equal(b.dernierCoup.lignes.length, 2)
-  assert.equal(b.dernierCoup.colonnes.length, 2)
-  assert.deepEqual(causes(b), [])
+test('lignes ET colonnes d\'un coup donnent tourner, avec chaque pièce du catalogue qui le permet', () => {
+  const rang = (n) => Array.from({ length: n }, (_, i) => i)
+  for (const niveau of NIVEAUX) {
+    const [l, c] = [duNiveau(GAINS.croisementLignes, niveau), duNiveau(GAINS.croisementColonnes, niveau)]
+    const candidates = CATALOGUE.filter((p) => p.hauteur >= l && p.largeur >= c)
+    assert.ok(candidates.length >= 3, `niveau ${niveau} : au moins le 4x4, le 3x3 et le grand L`)
+    for (const p of candidates) {
+      const e = poser(partie({ niveau, enCours: [p.id, 'bloc.0', 'bloc.0'], rangees: grillePourEffacer(p.id, rang(l), rang(c)) }), 0, 0, 0)
+      assert.ok(e.dernierCoup.lignes.length >= l && e.dernierCoup.colonnes.length >= c, p.id)
+      assert.deepEqual(gain(e, 'croisement'), { cause: 'croisement', sorte: 'tourner', ajoute: true }, `${p.id} niveau ${niveau}`)
+      assert.equal(e.reserve.tourner, 1, p.id)
+    }
+    for (const id of ['carre4.0', 'carre3.0', 'grandL.0']) assert.ok(candidates.some((p) => p.id === id), id)
+  }
+})
+
+test('une ligne ou une colonne de moins que le seuil du niveau ne donne pas tourner', () => {
+  const rang = (n) => Array.from({ length: n }, (_, i) => i)
+  for (const niveau of NIVEAUX) {
+    const [l, c] = [duNiveau(GAINS.croisementLignes, niveau), duNiveau(GAINS.croisementColonnes, niveau)]
+    const a = poser(partie({ niveau, enCours: ['carre4.0', 'bloc.0', 'bloc.0'], rangees: grillePourEffacer('carre4.0', rang(l - 1), rang(c)) }), 0, 0, 0)
+    assert.equal(a.dernierCoup.lignes.length, l - 1)
+    assert.equal(a.dernierCoup.colonnes.length, c)
+    assert.ok(!causes(a).includes('croisement'), `niveau ${niveau}`)
+    const b = poser(partie({ niveau, enCours: ['carre4.0', 'bloc.0', 'bloc.0'], rangees: grillePourEffacer('carre4.0', rang(l), rang(c - 1)) }), 0, 0, 0)
+    assert.equal(b.dernierCoup.lignes.length, l)
+    assert.equal(b.dernierCoup.colonnes.length, c - 1)
+    assert.ok(!causes(b).includes('croisement'), `niveau ${niveau}`)
+  }
 })
 
 test('grille entièrement vidée : un gain au choix en attente, puis choisirBonus', () => {
@@ -252,17 +286,27 @@ test('la borne théorique est bien une borne : la meilleure pose réalisable du 
 
 // --- Les paliers de score ---------------------------------------------------------
 
-test('palier : changer tous les 50 000 points, et le prochain palier avance', () => {
-  assert.equal(nouvellePartie({ graine: 1 }).palier, 50000)
-  const e = poser(partie({ rangees: enBas('#########.'), score: 49950, palier: 50000, defi: { points: 1e9, coups: 1e6, scoreDebut: 49950, coupsFaits: 0 } }), 0, 9, 9)
-  assert.ok(e.score >= 50000)
-  assert.deepEqual(gain(e, 'palier'), { cause: 'palier', sorte: 'changer', palier: 50000, ajoute: true })
+test('palier : changer tous les 30 000 points au niveau 1, et le prochain palier avance', () => {
+  const P = duNiveau(GAINS.palier, 1)
+  assert.equal(P, 30000)
+  assert.equal(nouvellePartie({ graine: 1 }).palier, P)
+  const e = poser(partie({ rangees: enBas('#########.'), score: P - 50, palier: P, defi: { points: 1e9, coups: 1e6, scoreDebut: P - 50, coupsFaits: 0 } }), 0, 9, 9)
+  assert.ok(e.score >= P)
+  assert.deepEqual(gain(e, 'palier'), { cause: 'palier', sorte: 'changer', palier: P, ajoute: true })
   assert.equal(e.reserve.changer, 1)
-  assert.equal(e.palier, 100000)
-  // Pas de nouveau gain tant que le palier suivant n'est pas atteint.
+  assert.equal(e.palier, 2 * P)
+  // Pas de nouveau gain tant que le palier suivant n\'est pas atteint.
   const suite = poser(e, 1, 0, 0)
   assert.deepEqual(causes(suite), [])
-  assert.equal(suite.palier, 100000)
+  assert.equal(suite.palier, 2 * P)
+})
+
+test('palier : plus loin quand le niveau monte, et chaque niveau avance de son propre palier', () => {
+  const P = duNiveau(GAINS.palier, 10)
+  assert.equal(P, 75000)
+  assert.equal(nouvellePartie({ graine: 1, niveau: 10 }).palier, P)
+  const e = poser(partie({ niveau: 10, rangees: enBas('#########.'), score: P - 50, palier: P, defi: { points: 1e9, coups: 1e6, scoreDebut: P - 50, coupsFaits: 0 } }), 0, 9, 9)
+  assert.equal(e.palier, 2 * P)
 })
 
 test('un gros coup qui franchit deux paliers donne deux bonus', () => {
@@ -338,8 +382,9 @@ test('la case surprise est portée par une pièce du tirage et prend sa place à
     // Le décompte ne baisse pas à la pose qui la place, mais à la suivante.
     assert.equal(poser(e, 1, 0, 0).surprise.reste, compteSurprise(niveau) - 1)
   }
-  assert.ok(GAINS.surprise.compte.every((n) => n >= 6 && n <= 9), 'de l\'ordre de 6 à 9 poses')
+  assert.ok(GAINS.surprise.compte.every((n) => n >= 3 && n <= 10), 'de l@ordre de 3 à 10 poses'.replace('@', "'"))
   assert.ok(GAINS.surprise.compte.every((n, i, t) => i === 0 || n <= t[i - 1]), 'moins de temps aux niveaux difficiles')
+  assert.ok(GAINS.surprise.compte[0] > GAINS.surprise.compte[9], 'bien moins de temps au niveau 10 qu@au niveau 1'.replace('@', "'"))
 })
 
 test('une pièce à surprise qui complète sa ligne en la posant gagne tout de suite', () => {
@@ -449,7 +494,7 @@ test('choisir un bonus empêche d\'annuler la pose qui l\'a donné', () => {
 // --- Reproductibilité, hasard à part ----------------------------------------------
 
 function partieJouee(graine, options = {}) {
-  let e = nouvellePartie({ graine, niveau: 3, reserve: reserveInitiale(), ...options })
+  let e = nouvellePartie({ graine, niveau: 1, reserve: reserveInitiale(), ...options })
   const trace = []
   for (let n = 0; n < 300 && piecesJouables(e).length > 0; n++) {
     const index = piecesJouables(e)[0]
@@ -598,10 +643,12 @@ test('le simulateur joue des parties et rapporte les mesures de calage', () => {
   assert.deepEqual(mesurerNiveau({ niveau: 2, parties: 3, poses: 50 }), t)
 })
 
-test('calage : au premier niveau comme au dernier, un bonus toutes les 30 à 60 pièces pour le robot glouton', () => {
-  for (const niveau of [NIVEAU_MIN, NIVEAU_MAX]) {
-    const t = mesurerNiveau({ niveau, parties: 12, poses: 200 })
-    assert.ok(t.posesParBonus > 25 && t.posesParBonus < 70, `niveau ${niveau} : une pièce posée sur ${t.posesParBonus.toFixed(1)}`)
-    assert.ok(t.tauxDefi < 0.25, `niveau ${niveau} : les défis restent difficiles (${t.tauxDefi})`)
-  }
+test('calage : un bonus toutes les 18 à 45 pièces au niveau 1, bien plus rarement au niveau 10, pour le robot glouton (BS57)', () => {
+  const t1 = mesurerNiveau({ niveau: NIVEAU_MIN, parties: 12, poses: 200 })
+  const t10 = mesurerNiveau({ niveau: NIVEAU_MAX, parties: 12, poses: 200 })
+  assert.ok(t1.posesParBonus > 18 && t1.posesParBonus < 45, `niveau 1 : une pièce posée sur ${t1.posesParBonus.toFixed(1)}`)
+  assert.ok(t10.posesParBonus > 40 && t10.posesParBonus < 120, `niveau 10 : une pièce posée sur ${t10.posesParBonus.toFixed(1)}`)
+  assert.ok(t10.posesParBonus > 1.5 * t1.posesParBonus, `niveau 10 : ${t10.posesParBonus.toFixed(1)} contre ${t1.posesParBonus.toFixed(1)} au niveau 1`)
+  assert.ok(t1.tauxDefi > 2 * t10.tauxDefi, `défis réussis : ${t1.tauxDefi.toFixed(3)} au niveau 1 contre ${t10.tauxDefi.toFixed(3)} au niveau 10`)
+  for (const t of [t1, t10]) assert.ok(t.tauxDefi < 0.25, `niveau ${t.niveau} : les défis restent difficiles (${t.tauxDefi})`)
 })

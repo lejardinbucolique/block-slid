@@ -63,7 +63,7 @@ function partieCouleurs() {
   return ex
 }
 function partieLigne() {
-  const rangees = Array.from({ length: 10 }, (_, l) => (l === 9 ? 'xxxxxx....' : (l >= 6 ? 'oooooooooo'.replace(/./g, (c, k) => ((l + k) % 3 === 0 ? 'v' : 'r')) : '..........')))
+  const rangees = Array.from({ length: 10 }, (_, l) => (l === 9 ? 'xxxxxx....' : (l >= 9 - Number(process.env.PLEINES ?? 3) ? 'oooooooooo'.replace(/./g, (c, k) => ((l + k) % 3 === 0 ? 'v' : 'r')) : '..........')))
   const e = depuisTexte({ rangees, enCours: ['barre4.0', 'bloc.0', 'barre2.0'], suivantes: ['bloc.0', 'barre2.0', 'coin.0'], reserve, niveau: 4, graine: 5, defi })
   const ex = JSON.parse(J(exporterPartie(e)))
   const map = { x: 'bleu', o: 'orange', v: 'vert', r: 'rouge' }

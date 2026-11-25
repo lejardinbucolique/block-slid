@@ -82,7 +82,7 @@ function debloquer(etat) {
 }
 
 // Une partie du robot, rend ses mesures.
-export function jouer({ niveau, graine, poses, reglages = REGLAGES }) {
+export function jouer({ niveau, graine, poses, reglages = REGLAGES, suivre = null }) {
   let etat = nouvellePartie({ niveau, graine, reserve: reserveInitiale(), reglages })
   const m = {
     poses: 0, bonus: 0, perdue: false, score: 0,
@@ -103,6 +103,7 @@ export function jouer({ niveau, graine, poses, reglages = REGLAGES }) {
     if (apres.dernierCoup.points !== coup.points) throw new Error(`score évalué ${coup.points}, joué ${apres.dernierCoup.points}`)
     etat = apres
     m.poses++
+    if (suivre) suivre(etat)
     const d = etat.dernierCoup
     for (const g of d.gains) {
       m.gains[g.cause]++

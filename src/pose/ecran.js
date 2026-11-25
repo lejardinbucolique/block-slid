@@ -190,6 +190,7 @@ const HTML_RACINE = `
   <div id="pose-zone">
     <div id="pose-plateau">
       <div id="pose-grille" role="application" aria-label="Grille de jeu"></div>
+      <div id="pose-lignes" aria-hidden="true"></div>
       <div id="pose-ombre" aria-hidden="true"></div>
       <div id="pose-effets" aria-hidden="true"></div>
     </div>
@@ -267,6 +268,7 @@ export async function demarrerJeu() {
   const grilleEl = $('pose-grille')
   const effets = $('pose-effets')
   const ombreEl = $('pose-ombre')
+  const lignesEl = $('pose-lignes')
   const bonusEl = $('pose-bonus')
   const aideEl = $('pose-aide')
   const mainEl = $('pose-main')
@@ -310,7 +312,7 @@ export async function demarrerJeu() {
   let echelleApercu = ECHELLE_APERCU
   let signatures = { main: [], apercu: [] }
   let premierAffichage = true
-  let touchees = [] // les cases de la grille marquées par l'aperçu du coup
+  let bandesMontrees = new Set() // les bandes de l'aperçu qui sont visibles : « l3 » (ligne 3), « c5 » (colonne 5)
 
   racine.dataset.style = style
 
@@ -358,6 +360,37 @@ export async function demarrerJeu() {
     }
   }
   const laCase = (l, k) => cases[l * REGLAGES.colonnes + k]
+
+  // Les bandes de l'aperçu (BS59) : une par ligne et par colonne, dans leur couche (#pose-lignes), cachées
+  // tant qu'elles ne servent pas. Une ligne ou colonne que la pose compléterait s'y éclaire ; les cases de la
+  // grille, elles, ne bougent pas pendant le glisser, ce qui repeignait leurs textures à chaque changement de place.
+  const bandes = new Map()
+  for (const [sorte, nombre] of [['l', REGLAGES.lignes], ['c', REGLAGES.colonnes]]) {
+    for (let i = 0; i < nombre; i++) {
+      const el = document.createElement('div')
+      el.className = sorte === 'l' ? 'pose-bande pose-bande-ligne' : 'pose-bande pose-bande-colonne'
+      el.hidden = true
+      lignesEl.append(el)
+      bandes.set(`${sorte}${i}`, el)
+    }
+  }
+  function masquerBandes() {
+    for (const cle of bandesMontrees) bandes.get(cle).hidden = true
+    bandesMontrees = new Set()
+  }
+  // Ne touche qu'aux bandes qui changent : d'une place à l'autre, la plupart restent comme elles sont.
+  function montrerBandes(lignes, colonnes) {
+    const voulues = new Set([...lignes.map((l) => `l${l}`), ...colonnes.map((k) => `c${k}`)])
+    for (const cle of bandesMontrees) if (!voulues.has(cle)) bandes.get(cle).hidden = true
+    for (const cle of voulues) {
+      if (bandesMontrees.has(cle)) continue
+      const el = bandes.get(cle)
+      const rang = Number(cle.slice(1))
+      el.style.translate = cle[0] === 'l' ? `0 ${rang * cellule}px` : `${rang * cellule}px 0`
+      el.hidden = false
+    }
+    bandesMontrees = voulues
+  }
 
   const boutonsBonus = {}
   for (const sorte of SORTES) {
@@ -415,6 +448,7 @@ export async function demarrerJeu() {
     fixer('--haut-main', `${cellule * ECHELLE_MAIN * RANGEES_MAX}px`)
     fixer('--haut-apercu', `${cellule * echelleApercu * RANGEES_MAX}px`)
     fixer('--largeur-grille', `${cellule * REGLAGES.colonnes}px`)
+    fixer('--lignes', String(REGLAGES.lignes))
     fixer('--cols', String(REGLAGES.colonnes)) // les textures étalent leur animation sur une ligne de cette longueur
   }
 
@@ -423,19 +457,25 @@ export async function demarrerJeu() {
   // Les cases de la grille d'après `grille` (l'état par défaut) ; `surprise` est la case à
   // numéro à montrer. Efface au passage toute marque d'aperçu ou d'animation.
   function dessinerGrille(grille = etat.grille, surprise = etat.surprise) {
-    touchees = []
+    masquerBandes()
     for (let l = 0; l < REGLAGES.lignes; l++) {
       for (let k = 0; k < REGLAGES.colonnes; k++) {
         const { el, bloc } = laCase(l, k)
         const valeur = grille[l][k]
         const estSurprise = Boolean(surprise) && valeur !== null && surprise.ligne === l && surprise.col === k
-        el.className = `pose-case${valeur !== null ? ' occupee' : ''}${estSurprise ? ' surprise' : ''}`
-        bloc.className = 'pose-bloc'
-        bloc.style.removeProperty('--col')
-        bloc.style.removeProperty('--duree')
-        if (valeur !== null) bloc.style.setProperty('--couleur', couleurDe(valeur))
+        // Seul ce qui change s'écrit : une case redessinée à l'identique recalculait quand même le style de sa
+        // texture (la couleur d'un bloc touche tous ses dessins), cent fois d'un coup à chaque pose (BS59).
+        const classe = `pose-case${valeur !== null ? ' occupee' : ''}${estSurprise ? ' surprise' : ''}`
+        if (el.className !== classe) el.className = classe
+        if (bloc.className !== 'pose-bloc') bloc.className = 'pose-bloc'
+        if (bloc.style.getPropertyValue('--col') !== '') bloc.style.removeProperty('--col')
+        if (bloc.style.getPropertyValue('--duree') !== '') bloc.style.removeProperty('--duree')
+        if (valeur !== null) {
+          const couleur = couleurDe(valeur)
+          if (bloc.style.getPropertyValue('--couleur') !== couleur) bloc.style.setProperty('--couleur', couleur)
+        }
         if (estSurprise) el.dataset.reste = String(surprise.reste)
-        else delete el.dataset.reste
+        else if (el.dataset.reste !== undefined) delete el.dataset.reste
       }
     }
   }
@@ -560,6 +600,9 @@ export async function demarrerJeu() {
       ['main', emplacements, etat.enCours, '--cm'],
       ['apercu', emplacementsApercu, etat.suivantes, '--ca'],
     ]
+    // Les pièces nouvelles entrent d'un petit saut : leur classe se pose après une seule mesure pour toutes (BS61),
+    // non après une mesure par pièce (la main se renouvelle d'un coup : jusqu'à six recalculs de la page à la suite).
+    const entrees = []
     for (const [nom, slots, pieces, taille] of rangees) {
       slots.forEach((slot, i) => {
         const x = pieces[i]
@@ -569,9 +612,8 @@ export async function demarrerJeu() {
           if (x) {
             slot.append(elementPiece(x, taille))
             if (!premierAffichage && !sansMouvement()) {
-              void slot.offsetWidth
               const tourne = etat.dernierBonus?.sorte === 'tourner' && etat.dernierBonus.index === decalage[nom] + i
-              slot.classList.add(tourne ? 'tourne' : 'entre')
+              entrees.push([slot, tourne ? 'tourne' : 'entre'])
             }
           }
         }
@@ -583,6 +625,10 @@ export async function demarrerJeu() {
         slot.classList.toggle('bloquee', enMain && !jouables.has(place))
         slot.classList.toggle('visable', enMain && visee !== null && peutUtiliser(etat, visee, place))
       })
+    }
+    if (entrees.length > 0) {
+      void racine.offsetWidth
+      for (const [slot, classe] of entrees) slot.classList.add(classe)
     }
     signatures = nouvelles
     premierAffichage = false
@@ -602,9 +648,9 @@ export async function demarrerJeu() {
 
   // L'ombre de la pièce tirée vit dans sa propre couche (#pose-ombre), dessinée une fois par
   // glisser puis seulement déplacée : changer de case visée ne repeint plus aucune texture (BS53).
-  // Ses cases imitent une case visée de la grille (même place, même halo, bloc à .75). Une case
-  // visée qui s'élève (la pièce complète sa ligne) se montre, elle, dans la grille, élevée avec
-  // les autres : sa case de la couche se cache.
+  // Ses cases imitent une case visée de la grille (même place, même halo, bloc à .75). Les lignes
+  // et colonnes que la pose complèterait s'éclairent dans une autre couche (#pose-lignes) : aucune
+  // case de la grille n'est touchée pendant le glisser.
   function preparerOmbre(enMain) {
     const p = piece(enMain.id)
     ombreEl.classList.remove('montre')
@@ -620,47 +666,37 @@ export async function demarrerJeu() {
     }))
   }
 
+  function preparerOmbreDuGlisse() {
+    if (!glisse || glisse.ombrePrete) return
+    glisse.ombrePrete = true
+    preparerOmbre(glisse.enMain)
+  }
+
   function effacerApercu() {
-    for (const { el } of touchees) el.classList.remove('ombre', 'vise', 'eleve')
-    touchees = []
+    masquerBandes()
     ombreEl.classList.remove('montre')
   }
 
   function montrerApercu(apercu, enMain) {
-    for (const { el } of touchees) el.classList.remove('ombre', 'vise', 'eleve')
-    touchees = []
     if (!apercu?.valide) {
-      ombreEl.classList.remove('montre')
+      effacerApercu()
       return
     }
-    const eleves = casesElevees(apercu, REGLAGES.lignes, REGLAGES.colonnes)
+    // Le doigt est entré sur la grille avant que l'ombre soit prête : elle se prépare tout de suite.
+    preparerOmbreDuGlisse()
     const p = piece(enMain.id)
     const dl = apercu.cases[0].ligne - p.cases[0].ligne
     const dk = apercu.cases[0].col - p.cases[0].col
     ombreEl.style.translate = `${dk * cellule}px ${dl * cellule}px`
-    apercu.cases.forEach((c, i) => {
-      const eleve = eleves.some((e) => e.ligne === c.ligne && e.col === c.col)
-      const el = ombreEl.children[i]
-      if (el && el.hidden !== eleve) el.hidden = eleve
-      if (!eleve) return
-      const cible = laCase(c.ligne, c.col)
-      cible.bloc.style.setProperty('--couleur', couleurDe(enMain.couleurs?.[i] ?? enMain.couleur))
-      cible.el.classList.add('ombre', 'vise')
-      touchees.push(cible)
-    })
-    for (const c of eleves) {
-      const cible = laCase(c.ligne, c.col)
-      cible.el.classList.add('eleve')
-      if (!touchees.includes(cible)) touchees.push(cible)
-    }
+    montrerBandes(apercu.lignes, apercu.colonnes)
     ombreEl.classList.add('montre')
   }
 
   // --- Geste : tirer une pièce ------------------------------------------------------------
 
-  function viser(e) {
-    const r = grilleEl.getBoundingClientRect()
-    const p = piece(glisse.enMain.id)
+  function viser(e, g = glisse) {
+    const r = g.grille
+    const p = piece(g.enMain.id)
     return caseVisee({
       x: e.clientX,
       y: e.clientY,
@@ -715,8 +751,13 @@ export async function demarrerJeu() {
     racine.append(fantome)
     const zone = e.currentTarget
     try { zone.setPointerCapture(e.pointerId) } catch { /* souris sortie de la fenêtre : sans importance */ }
-    glisse = { pointeur: e.pointerId, index, enMain, slot, fantome, zone, echelle, cle: null, apercu: null }
-    preparerOmbre(enMain)
+    // La grille ne bouge pas pendant le glisser : son rectangle se mesure une fois, non à chaque mouvement du doigt
+    // (la mesure forçait un recalcul de style de toute la page, aperçu changé ou non).
+    glisse = { pointeur: e.pointerId, index, enMain, slot, fantome, zone, echelle, cle: null, apercu: null, grille: grilleEl.getBoundingClientRect(), ombrePrete: false }
+    // L'ombre se prépare à l'image suivante : sa première peinture (des textures par bloc) ne s'ajoute pas à
+    // celle de la pièce qui se détache de la main (BS61). Le doigt n'est pas encore sur la grille.
+    const g = glisse
+    requestAnimationFrame(() => requestAnimationFrame(() => { if (glisse === g) preparerOmbreDuGlisse() }))
     void fantome.offsetWidth // le départ est posé : la suite s'anime depuis lui
     slot.classList.add('leve')
     placerFantome(e)
@@ -826,9 +867,12 @@ export async function demarrerJeu() {
     dessinerGrille(pleine, etat.surprise ?? avant.surprise)
     dessinerPieces()
     pop(coup.casesPosees)
-    for (const c of casesElevees(coup, REGLAGES.lignes, REGLAGES.colonnes)) laCase(c.ligne, c.col).el.classList.add('eleve')
+    // Les lignes et colonnes que le coup efface se détachent, comme dans l'aperçu : leurs bandes, non leurs cases
+    // (les élever repeignait toutes leurs textures d'un coup, à l'instant où le doigt se relève).
+    montrerBandes(coup.lignes, coup.colonnes)
     lecture = { minuteurs: [], fin: apres }
     const apresLaPose = () => {
+      masquerBandes()
       if (style === STYLE_UNI) {
         marquerEffacement(coup, 'efface')
         dessinerScore()

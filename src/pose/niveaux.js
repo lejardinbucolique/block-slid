@@ -33,20 +33,32 @@ export const POIDS_NIVEAUX = Object.freeze([
 // pièces (main et aperçu) et peut se mettre dans l'impasse. En dessous, deux aides : la main
 // qui arrive est toujours posable en entier (le filet du moteur), et le tirage cherche les
 // pièces qui comblent les espaces libres et finissent des lignes. Le seul endroit où changer ce seuil.
-export const NIVEAU_DIFFICILE = 7
+export const NIVEAU_DIFFICILE = 6
 
 // Le dernier niveau où la future main (l'aperçu) se joue aussi (BS58) : jusqu'à lui, les six pièces
 // sont posables à la fois, dans l'ordre qu'on veut ; au-dessus, seule la main en cours l'est et l'aperçu
 // ne fait que se montrer. Le seul endroit où changer ce seuil.
 export const NIVEAU_APERCU_JOUABLE = 2
 
-// La force de l'aide au tirage : 1 au niveau 1, qui s'estompe d'un niveau à l'autre, 0 dès
-// le niveau difficile (pas de marche brutale).
-export const aideDuNiveau = (niveau) => (niveau >= NIVEAU_DIFFICILE ? 0 : (NIVEAU_DIFFICILE - niveau) / (NIVEAU_DIFFICILE - NIVEAU_MIN))
+// Les trois réglages du tirage qui font la difficulté, niveau par niveau (BS57), à caler ensemble
+// par la mesure (tools/progression-pose.js) : la difficulté mesurée monte d'un niveau au suivant,
+// jamais ne baisse (un test le vérifie sur les tables).
+//
+// AIDES : la force de l'aide au tirage, pleine (1) au niveau 1, qui s'estompe d'un niveau à
+// l'autre jusqu'à 0 dès le niveau difficile (pas de marche brutale).
+export const AIDES = Object.freeze([1, 0.8, 0.6, 0.4, 0.2, 0, 0, 0, 0, 0])
 
-// La force du tirage hostile (BS55) : 0 aux niveaux faciles, puis de plus en plus forte jusqu'au
-// niveau 10 (1) : il favorise les pièces qui gênent, celles qui n'effacent rien sur la grille du moment.
-export const hostiliteDuNiveau = (niveau) => (niveau < NIVEAU_DIFFICILE ? 0 : (niveau - NIVEAU_DIFFICILE + 1) / (NIVEAU_MAX - NIVEAU_DIFFICILE + 1))
+// HOSTILITES : la force du tirage hostile (BS55), 0 aux niveaux faciles puis de plus en plus forte
+// jusqu'au niveau 10 : il favorise les pièces qui gênent, celles qui n'effacent rien sur la grille du moment.
+export const HOSTILITES = Object.freeze([0, 0, 0, 0, 0, 0.2, 0.4, 0.6, 0.8, 1])
+
+// RANGS : parmi les candidats du tirage, du plus large (0) au plus serré (1), celui qu'on garde.
+export const RANGS = Object.freeze([0, 0.08, 0.2, 0.3, 0.5, 0.75, 0.8, 0.91, 0.96, 1])
+
+const duNiveau = (table, niveau) => table[Math.min(Math.max(niveau, NIVEAU_MIN), NIVEAU_MAX) - NIVEAU_MIN]
+export const aideDuNiveau = (niveau) => duNiveau(AIDES, niveau)
+export const hostiliteDuNiveau = (niveau) => duNiveau(HOSTILITES, niveau)
+export const rangDuNiveau = (niveau) => duNiveau(RANGS, niveau)
 
 export const niveauValide = (n) => Number.isInteger(n) && n >= NIVEAU_MIN && n <= NIVEAU_MAX
 

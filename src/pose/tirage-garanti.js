@@ -40,14 +40,14 @@
 // Garantie d'effacement (BS55). Aux niveaux faciles, quand la main du tour doit être tirée sur la
 // grille réelle (`exigerEfface`, sans pièces en main), l'une de ses pièces au moins efface une
 // ligne ou une colonne dès la pose, si une pièce de la table le peut. Le moteur la demande quand la
-// main prévue par l'aperçu n'offre rien à effacer, avec une chance qui s'estompe jusqu'au niveau 7.
+// main prévue par l'aperçu n'offre rien à effacer, avec une chance qui s'estompe jusqu'au niveau 6.
 //
 // Interface (voir tirage.js) : tirageGaranti({ aleatoire, niveau, nombre, grille,
 // enCours, reglages, exigerEfface }) rend `nombre` identifiants de pièces. tirerGaranti rend la même
 // chose avec le détail du tirage (pour mesurer).
 
 import { piece, CATALOGUE } from './pieces.js'
-import { poidsDesPieces, aideDuNiveau, hostiliteDuNiveau, NIVEAU_MIN, NIVEAU_MAX } from './niveaux.js'
+import { poidsDesPieces, aideDuNiveau, hostiliteDuNiveau, rangDuNiveau } from './niveaux.js'
 
 // Candidats construits par tirage : du plus large au plus serré, on en garde un.
 export const CANDIDATS = 6
@@ -81,7 +81,7 @@ export const AIDE_FRONTIERES = 5
 export const AIDE_TAILLE = 0
 export const AIDE_FRAGILITE = 10
 export const ESSAIS_FRAGILITE = 8
-export const CANDIDATS_AIDE = 16
+export const CANDIDATS_AIDE = 24
 
 // Le tirage hostile des niveaux difficiles (BS55, niveaux.js : hostiliteDuNiveau, 0 aux niveaux
 // faciles, 1 au niveau 10) : le poids d'une pièce est multiplié par
@@ -92,7 +92,7 @@ export const CANDIDATS_AIDE = 16
 // joueur qui ne suit pas la suite, plus elle est rangée au bout, là où le niveau 10 la garde.
 export const HOSTILE = 12
 export const HOSTILE_ETROIT = 2
-export const HOSTILE_FRAGILE = 3
+export const HOSTILE_FRAGILE = 10
 
 // --- Pièces et grille en masques de bits --------------------------------------
 // Une rangée de la grille est un entier dont le bit c vaut 1 si la colonne c est
@@ -125,6 +125,72 @@ const versMasques = (grille) => grille.map((r) => r.reduce((m, v, c) => (v !== n
 const tientEn = (rangees, p, l, k) => {
   for (let r = 0; r < p.hauteur; r++) if (rangees[l + r] & (p.lignes[r] << k)) return false
   return true
+}
+
+// Tables de pose (BS61), qui évitent d'essayer les places une à une. Pour un masque de rangée de pièce m
+// et une rangée de grille `occupee` : `place[occupee]` a pour bit k « m décalé de k tient dans cette rangée »,
+// `complete[occupee]` « m décalé de k comble tout ce qui lui manque ». Une table de colonne dit de même, pour
+// la colonne q d'une pièce et ce qui manque à une colonne de la grille (en bits de rangées), les décalages l
+// qui la comblent. Elles ne dépendent que de la taille de la grille.
+const TABLES_RANGEE = new Map()
+function tableRangee(m, largeur) {
+  const cle = `${largeur}:${m}`
+  let t = TABLES_RANGEE.get(cle)
+  if (!t) {
+    const taille = 1 << largeur
+    const place = new Int32Array(taille)
+    const complete = new Int32Array(taille)
+    for (let occupee = 0; occupee < taille; occupee++) {
+      for (let k = 0; k < largeur && (m << k) < taille; k++) {
+        const s = m << k
+        if (!(occupee & s)) place[occupee] |= 1 << k
+        if (s === ((taille - 1) & ~occupee)) complete[occupee] |= 1 << k
+      }
+    }
+    t = { place, complete }
+    TABLES_RANGEE.set(cle, t)
+  }
+  return t
+}
+
+const TABLES_COLONNE = new Map()
+function tableColonne(q, hauteur) {
+  const cle = `${hauteur}:${q}`
+  let t = TABLES_COLONNE.get(cle)
+  if (!t) {
+    const taille = 1 << hauteur
+    t = new Int32Array(taille)
+    for (let manque = 0; manque < taille; manque++) {
+      for (let l = 0; l < hauteur && (q << l) < taille; l++) if ((q << l) === manque) t[manque] |= 1 << l
+    }
+    TABLES_COLONNE.set(cle, t)
+  }
+  return t
+}
+
+function tablesDe(i, hauteur, largeur) {
+  const t = i.tables
+  if (t && t.hauteur === hauteur && t.largeur === largeur) return t
+  return (i.tables = {
+    hauteur,
+    largeur,
+    rangees: i.lignes.map((m) => tableRangee(m, largeur)),
+    colonnes: i.colonnes.map((q) => tableColonne(q, hauteur)),
+  })
+}
+
+// Les places k de la pièce dans les rangées l à l + hauteur - 1, en bits ; `libres` : les k que la grille permet (bits 0 à largeur - largeur de la pièce).
+function placesEnL(rangees, t, hauteurPiece, l, libres) {
+  let place = libres
+  for (let r = 0; r < hauteurPiece && place !== 0; r++) place &= t.rangees[r].place[rangees[l + r]]
+  return place
+}
+
+const rang = (bit) => 31 - Math.clz32(bit)
+const nombreDeBits = (x) => {
+  let n = 0
+  for (; x !== 0; x &= x - 1) n++
+  return n
 }
 
 // La grille après la pose de p en (l, k) et l'effacement des lignes et colonnes
@@ -280,7 +346,8 @@ function construireAide(depart, nombre, poids, aide, dim, aleatoire, memo, exige
   const ids = []
   let efface = 0
   for (let i = 0; i < nombre; i++) {
-    let options = optionsSur(grille, poids, dim, memo)
+    const entree = optionsSur(grille, poids, dim, memo)
+    let options = entree.options
     // La garantie d'effacement (BS55) : la première pièce est posée sur la grille de départ, elle
     // efface donc quelque chose pour de bon quand la grille du moment le permet.
     if (exiger && i === 0) {
@@ -299,7 +366,8 @@ function construireAide(depart, nombre, poids, aide, dim, aleatoire, memo, exige
       continue
     }
     const choix = tirerSelonPoids(ponderees, total, aleatoire())
-    const { lieux, meilleur } = options.find((o) => o.id === choix)
+    const { meilleur } = options.find((o) => o.id === choix)
+    const lieux = lieuxDe(entree, choix, dim)
     const p = infos(choix)
     const meilleurs = lieux.filter((x) => x.e === meilleur)
     let serres = meilleurs
@@ -325,7 +393,8 @@ function construireGene(depart, nombre, poids, hostilite, dim, aleatoire, memo) 
   let grille = depart
   const ids = []
   for (let i = 0; i < nombre; i++) {
-    const options = optionsSur(grille, poids, dim, memo)
+    const entree = optionsSur(grille, poids, dim, memo)
+    const options = entree.options
     if (options.length === 0) {
       ids.push('bloc.0')
       continue
@@ -337,7 +406,8 @@ function construireGene(depart, nombre, poids, hostilite, dim, aleatoire, memo) 
       return { id: o.id, poids: w }
     })
     const choix = tirerSelonPoids(ponderees, total, aleatoire())
-    const { lieux, meilleur } = options.find((o) => o.id === choix)
+    const { meilleur } = options.find((o) => o.id === choix)
+    const lieux = lieuxDe(entree, choix, dim)
     // Sur la copie, la pièce se pose là où elle range le moins : la suite des pièces tirées part d'une
     // grille moins bien rangée que celle d'un joueur qui joue bien. Hors des places qui effacent, s'il y en a d'autres.
     const p = infos(choix)
@@ -353,33 +423,73 @@ function construireGene(depart, nombre, poids, hostilite, dim, aleatoire, memo) 
   return ids
 }
 
-// Les pièces de poids non nul qui tiennent sur cette grille : { id, poids, lieux: [{ l, k, e }],
-// meilleur } avec e les lignes et colonnes effacées par la pose en (l, k), meilleur le plus grand
-// e. Mémorisé par grille le temps d'un tirage : les candidats partent des mêmes grilles.
+// Les pièces de poids non nul qui tiennent sur cette grille : { id, poids, meilleur, ouverture } avec
+// meilleur le plus grand nombre de lignes et colonnes qu'une pose effacerait, ouverture la part des
+// places où la pièce tient. Mémorisé par grille le temps d'un tirage : les candidats partent des mêmes
+// grilles. La liste de ses places { l, k, e } (e : ce que la pose en (l, k) efface) ne se construit que pour la
+// pièce tirée (lieuxDe) : les autres n'en ont pas besoin.
 function optionsSur(grille, poids, dim, memo) {
   const cle = grille.join(',')
-  let options = memo.get(cle)
-  if (options) return options
+  let entree = memo.get(cle)
+  if (entree) return entree
   const { hauteur, largeur, plein } = dim
   const manque = manques(grille, plein)
-  options = []
+  const options = []
+  const parL = new Int32Array(hauteur)
   for (const q of poids) {
     if (q.poids <= 0) continue
     const p = infos(q.id)
-    const lieux = []
-    let meilleur = 0
-    for (let l = 0; l + p.hauteur <= hauteur; l++) {
-      for (let k = 0; k + p.largeur <= largeur; k++) {
-        if (!tientEn(grille, p, l, k)) continue
-        const e = effacements(manque, p, l, k)
-        if (e > meilleur) meilleur = e
-        lieux.push({ l, k, e })
+    const t = tablesDe(p, hauteur, largeur)
+    const nl = hauteur - p.hauteur + 1
+    const nk = largeur - p.largeur + 1
+    const libres = (1 << nk) - 1
+    // Pour chaque l, les k où une colonne de la pièce comble une colonne de la grille.
+    parL.fill(0)
+    for (let k = 0; k < nk; k++) {
+      let b = 0
+      for (let c = 0; c < p.largeur; c++) b |= t.colonnes[c][manque.colonnes[k + c]]
+      for (; b !== 0; b &= b - 1) {
+        const l = rang(b & -b)
+        if (l < nl) parL[l] |= 1 << k
       }
     }
-    if (lieux.length > 0) options.push({ id: q.id, poids: q.poids, lieux, meilleur, ouverture: lieux.length / ((hauteur - p.hauteur + 1) * (largeur - p.largeur + 1)) })
+    let tient = 0
+    let meilleur = 0
+    for (let l = 0; l < nl; l++) {
+      const place = placesEnL(grille, t, p.hauteur, l, libres)
+      if (place === 0) continue
+      tient += nombreDeBits(place)
+      // Seules les places qui comblent une rangée ou une colonne effacent quelque chose.
+      let candidates = parL[l]
+      for (let r = 0; r < p.hauteur; r++) candidates |= t.rangees[r].complete[grille[l + r]]
+      for (candidates &= place; candidates !== 0; candidates &= candidates - 1) {
+        const e = effacements(manque, p, l, rang(candidates & -candidates))
+        if (e > meilleur) meilleur = e
+      }
+    }
+    if (tient > 0) options.push({ id: q.id, poids: q.poids, meilleur, ouverture: tient / (nl * nk) })
   }
-  memo.set(cle, options)
-  return options
+  entree = { options, grille, manque }
+  memo.set(cle, entree)
+  return entree
+}
+
+// Les places { l, k, e } de la pièce `id` sur la grille d'une entrée d'optionsSur, dans l'ordre des
+// lignes puis des colonnes.
+function lieuxDe(entree, id, dim) {
+  const { grille, manque } = entree
+  const { hauteur, largeur } = dim
+  const p = infos(id)
+  const t = tablesDe(p, hauteur, largeur)
+  const libres = (1 << (largeur - p.largeur + 1)) - 1
+  const lieux = []
+  for (let l = 0; l + p.hauteur <= hauteur; l++) {
+    for (let place = placesEnL(grille, t, p.hauteur, l, libres); place !== 0; place &= place - 1) {
+      const k = rang(place & -place)
+      lieux.push({ l, k, e: effacements(manque, p, l, k) })
+    }
+  }
+  return lieux
 }
 
 // Une main est fragile si un joueur qui ne suit pas la suite de poses peut s'y bloquer :
@@ -394,32 +504,42 @@ function fragilite(depart, ids, dim, aleatoire) {
     let grille = depart
     let restantes = ids.map(infos)
     while (restantes.length > 0) {
+      // Les pièces qui tiennent quelque part : seule celle qui est tirée a besoin de la liste de ses places.
       const choix = []
-      for (let i = 0; i < restantes.length; i++) {
-        const p = restantes[i]
-        const lieux = []
-        for (let l = 0; l + p.hauteur <= hauteur; l++) for (let k = 0; k + p.largeur <= largeur; k++) if (tientEn(grille, p, l, k)) lieux.push({ l, k })
-        if (lieux.length > 0) choix.push({ i, lieux })
-      }
+      for (let i = 0; i < restantes.length; i++) if (tientQuelquePart(grille, restantes[i], hauteur, largeur)) choix.push(i)
       if (choix.length === 0) { ratees++; break }
-      const { i, lieux } = choix[Math.floor(aleatoire() * choix.length)]
+      const i = choix[Math.floor(aleatoire() * choix.length)]
       const p = restantes[i]
+      const lieux = []
+      const t = tablesDe(p, hauteur, largeur)
+      const libres = (1 << (largeur - p.largeur + 1)) - 1
+      for (let l = 0; l + p.hauteur <= hauteur; l++) {
+        for (let place = placesEnL(grille, t, p.hauteur, l, libres); place !== 0; place &= place - 1) lieux.push(l * 32 + rang(place & -place))
+      }
       let lieu
       if (avide) {
         let meilleur = -1
         const manque = manques(grille, plein)
         for (const x of lieux) {
-          const v = effacements(manque, p, x.l, x.k) * 100 + contact(grille, p, x.l, x.k, largeur)
+          const v = effacements(manque, p, x >> 5, x & 31) * 100 + contact(grille, p, x >> 5, x & 31, largeur)
           if (v > meilleur) { meilleur = v; lieu = x }
         }
       } else {
         lieu = lieux[Math.floor(aleatoire() * lieux.length)]
       }
-      grille = poserEn(grille, p, lieu.l, lieu.k, plein)
+      grille = poserEn(grille, p, lieu >> 5, lieu & 31, plein)
       restantes = restantes.filter((_, j) => j !== i)
     }
   }
   return ratees / ESSAIS_FRAGILITE
+}
+
+// La pièce tient-elle quelque part sur cette grille ?
+function tientQuelquePart(rangees, p, hauteur, largeur) {
+  const t = tablesDe(p, hauteur, largeur)
+  const libres = (1 << (largeur - p.largeur + 1)) - 1
+  for (let l = 0; l + p.hauteur <= hauteur; l++) if (placesEnL(rangees, t, p.hauteur, l, libres) !== 0) return true
+  return false
 }
 
 // --- Serrure : la liberté de pose ---------------------------------------------
@@ -476,6 +596,8 @@ function tirerSelonPoids(poids, total, r) {
 //   remplacees    toujours 0 (les pièces qui ne tiennent pas ne sont jamais tirées)
 //   candidats     candidats construits
 //   liberte       liberté de pose du candidat gardé
+//   fragilite     fragilité du candidat gardé (voir fragilite) : la part des parties d'essai où un
+//                 joueur qui ne suit pas la suite de poses se bloque ; BS57 : elle monte avec le niveau
 //   efface        lignes et colonnes que la suite de poses du candidat gardé efface
 //                 (niveaux faciles seulement, 0 sinon)
 export function tirerGaranti({ aleatoire, niveau, nombre, grille, enCours = [], reglages, exigerEfface = false }) {
@@ -504,11 +626,13 @@ export function tirerGaranti({ aleatoire, niveau, nombre, grille, enCours = [], 
     if (aide > 0) {
       const { ids, efface, frontieres } = construireAide(departs[d], nombre, poids, aide, dim, aleatoire, memo, exigerEfface && enCours.length === 0)
       const libre = liberte(ids, parts[d])
-      candidats.push({ ids, liberte: libre, efface, valeur: libre + aide * (AIDE_VALEUR_EFFACE * efface - AIDE_FRONTIERES * frontieres / 100 - AIDE_FRAGILITE * fragilite(departs[d], ids, dim, aleatoire) + Math.sqrt(aide) * AIDE_TAILLE * ids.reduce((n, id) => n + piece(id).cases.length, 0) / 10) })
+      const fragile = fragilite(departs[d], ids, dim, aleatoire)
+      candidats.push({ ids, liberte: libre, efface, fragilite: fragile, valeur: libre + aide * (AIDE_VALEUR_EFFACE * efface - AIDE_FRONTIERES * frontieres / 100 - AIDE_FRAGILITE * fragile + Math.sqrt(aide) * AIDE_TAILLE * ids.reduce((n, id) => n + piece(id).cases.length, 0) / 10) })
     } else {
       const ids = construireGene(departs[d], nombre, poids, hostilite, dim, aleatoire, memo)
       const libre = liberte(ids, parts[d])
-      candidats.push({ ids, liberte: libre, valeur: libre - hostilite * HOSTILE_FRAGILE * fragilite(departs[d], ids, dim, aleatoire) })
+      const fragile = fragilite(departs[d], ids, dim, aleatoire)
+      candidats.push({ ids, liberte: libre, fragilite: fragile, valeur: libre - hostilite * HOSTILE_FRAGILE * fragile })
     }
   }
   // Du plus large au plus serré (à égalité, dans l'ordre de construction) ; le niveau
@@ -516,9 +640,9 @@ export function tirerGaranti({ aleatoire, niveau, nombre, grille, enCours = [], 
   // faciles, ce qui efface des lignes élargit le candidat et ce qui range la grille aussi (AIDE_*).
   const valeur = (c) => c.valeur ?? c.liberte
   candidats.sort((a, b) => valeur(b) - valeur(a))
-  const rang = (niveau - NIVEAU_MIN) / (NIVEAU_MAX - NIVEAU_MIN)
-  const gardee = candidats[Math.round(rang * (nombreCandidats - 1))]
+  const gardee = candidats[Math.round(rangDuNiveau(niveau) * (nombreCandidats - 1))]
   detail.liberte = gardee.liberte
+  detail.fragilite = gardee.fragilite
   detail.efface = gardee.efface ?? 0
   const ids = gardee.ids
   // Garantie d'effacement : la pièce qui efface est la première construite, on la place au hasard.

@@ -53,7 +53,10 @@ export function mesurer({ niveau, parties, plafond }) {
     survies.push(poses)
   }
   return {
-    niveau, mediane: mediane(survies), min: Math.min(...survies), bloquees: t.bloquees, parties,
+    niveau, mediane: mediane(survies), min: Math.min(...survies), bloquees: t.bloquees, parties, poses: t.poses,
+    // Les pertes pour mille poses : la mesure de difficulté la plus fine (la médiane plafonne dès que
+    // la moitié des parties va au bout), à comparer d'un niveau au suivant (BS57).
+    pertesPourMille: (1000 * t.bloquees) / t.poses,
     remplissage: t.remplissage / t.poses, effacesParPose: t.effaces / t.poses, casesParPiece: t.cases / t.poses,
     mainsQuiEffacent: t.mainsQuiEffacent / t.mains, pirePose: t.tirage, moyenneFinDeTour: t.dureeFinsDeTour / t.finsDeTour, remplacees: t.remplacees, tours: t.finsDeTour,
   }
@@ -63,11 +66,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const parties = Number(process.argv[2] ?? 60)
   const plafond = Number(process.argv[3] ?? 1500)
   const niveaux = process.argv[4] ? process.argv[4].split(',').map(Number) : [1, 2, 3, 4, 5, 6, 7, 10]
-  console.log('niveau | survie méd. (min) | bloquées | remplissage | effacés/pose | cases/pièce | mains qui effacent | fin de tour moy. ms | max ms | mains remplacées')
+  console.log('niveau | survie méd. (min) | bloquées | pertes/1000 poses | remplissage | effacés/pose | cases/pièce | mains qui effacent | fin de tour moy. ms | max ms | mains remplacées')
   for (const niveau of niveaux) {
     const m = mesurer({ niveau, parties, plafond })
     console.log([
-      String(m.niveau).padStart(6), `${m.mediane} (${m.min})`, `${m.bloquees}/${m.parties}`, m.remplissage.toFixed(1),
+      String(m.niveau).padStart(6), `${m.mediane} (${m.min})`, `${m.bloquees}/${m.parties}`, m.pertesPourMille.toFixed(2), m.remplissage.toFixed(1),
       m.effacesParPose.toFixed(3), m.casesParPiece.toFixed(2), `${(100 * m.mainsQuiEffacent).toFixed(0)} %`, m.moyenneFinDeTour.toFixed(2), m.pirePose.toFixed(1), `${m.remplacees}/${m.tours}`,
     ].join(' | '))
   }

@@ -63,7 +63,7 @@ function partieCouleurs() {
   return ex
 }
 function partieLigne() {
-  const rangees = Array.from({ length: 10 }, (_, l) => (l === 9 ? 'xxxxxx....' : (l >= 6 ? 'oooooooooo'.replace(/./g, (c, k) => ((l + k) % 3 === 0 ? 'v' : 'r')) : '..........')))
+  const rangees = Array.from({ length: 10 }, (_, l) => (l === 9 ? 'xxxxxx....' : (l >= 9 - Number(process.env.PLEINES ?? 3) ? 'oooooooooo'.replace(/./g, (c, k) => ((l + k) % 3 === 0 ? 'v' : 'r')) : '..........')))
   const e = depuisTexte({ rangees, enCours: ['barre4.0', 'bloc.0', 'barre2.0'], suivantes: ['bloc.0', 'barre2.0', 'coin.0'], reserve, niveau: 4, graine: 5, defi })
   const ex = JSON.parse(J(exporterPartie(e)))
   const map = { x: 'bleu', o: 'orange', v: 'vert', r: 'rouge' }
@@ -131,6 +131,12 @@ async function main() {
     const glisse = await mesurer(async () => {
       for (const [x, y] of chemin) { await toucher('touchMove', x, y); await attendre(8) }
       await attendre(300)
+      if (process.env.PROFIL) { await cdp('Profiler.enable'); await cdp('Profiler.setSamplingInterval', { interval: 200 }); await cdp('Profiler.start') }
+      if (process.env.EFFACE) { await toucher('touchEnd'); await attendre(Number(process.env.EFFACE)) }
+      if (process.env.PROFIL) { const { profile } = await cdp('Profiler.stop'); const dt = profile.timeDeltas; const propre = new Map(); const noeuds = new Map(profile.nodes.map((n) => [n.id, n]))
+        profile.samples.forEach((id, i) => { const n = noeuds.get(id); const k = `${n.callFrame.functionName || '(anonyme)'} ${n.callFrame.url.split('/').pop()}:${n.callFrame.lineNumber + 1}`; propre.set(k, (propre.get(k) ?? 0) + dt[i] / 1000) })
+        console.log('PROFIL (ms propres, CPU ralenti):', [...propre].sort((a, b) => b[1] - a[1]).slice(0, 18).map(([k, v]) => `${f1(v)} ${k}`).join(' | ')) }
+ // relâché sur la ligne à compléter : la pose, l'effacement
     })
     const fini = new Promise((r) => { globalThis.__fin = r })
     await cdp('Tracing.end')
@@ -146,11 +152,13 @@ async function main() {
     console.log(`== ${style}: ${ligne}`)
     if (process.env.LONG) { let t0 = Infinity; for (const e of evenements) if (e.ts && e.ts < t0) t0 = e.ts
       const longs = evenements.filter((e) => e.ph === 'X' && e.name === 'RunTask' && e.dur > Number(process.env.LONG) * 1000)
-      for (const L of longs) { const sous = evenements.filter((e) => e.ph === 'X' && e.tid === L.tid && e.ts >= L.ts && e.ts + e.dur <= L.ts + L.dur && e.dur > 4000 && e !== L)
+      for (const L of longs) { const sous = evenements.filter((e) => e.ph === 'X' && e.tid === L.tid && e.ts >= L.ts && e.ts + e.dur <= L.ts + L.dur && e.dur > Number(process.env.MIN ?? 4) * 1000 && e !== L)
         console.log('LONG', f1((L.ts - t0) / 1000), f1(L.dur / 1000), sous.map((e) => `${e.name}:${f1(e.dur / 1000)}${e.args?.data?.nodeName ? '[' + e.args.data.nodeName + ']' : ''}${e.args?.data?.type ? '[' + e.args.data.type + ']' : ''}`).join(' ')) } }
+    if (process.env.INV) { const c = new Map(); for (const e of evenements) { if (!/InvalidationTracking/.test(e.name)) continue; const d = e.args?.data ?? {}; const k = `${e.name.replace('InvalidationTracking','')}|${d.reason ?? ''}|${d.extraData ?? ''}|${d.invalidationSet ?? ''}|${d.nodeName ?? ''}|${(d.changedClass ?? d.changedAttribute ?? d.changedId ?? '')}`; c.set(k, (c.get(k) ?? 0) + 1) }
+      console.log([...c].sort((a, b) => b[1] - a[1]).slice(0, 25).map(([k, n]) => `${n}  ${k}`).join(String.fromCharCode(10))) }
     if (process.env.TOP) console.log([...parNom].sort((x, y) => y[1].dur - x[1].dur).slice(0, 40).map(([k, a]) => `${k}=${f1(a.dur / 1000)}/${a.n}`).join('  '))
     if (process.env.DEBUG) { let t0 = Infinity; for (const e of evenements) if (e.ts && e.ts < t0) t0 = e.ts; for (const e of evenements) if (((e.name === 'Paint' || e.name === 'RasterTask') && e.dur > Number(process.env.DEBUG)) || e.name === 'PaintInvalidationTracking') console.log(e.name, f1((e.ts - t0) / 1000), f1(e.dur / 1000), JSON.stringify(e.args).slice(0, 200)) }
-    await toucher('touchEnd')
+    if (!process.env.EFFACE) await toucher('touchEnd')
     await attendre(300)
     lignes.push({ style, glisse, n: chemin.length })
   }

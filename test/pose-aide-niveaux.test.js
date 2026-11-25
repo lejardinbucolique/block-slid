@@ -1,7 +1,7 @@
 // Aides des niveaux faciles de block-pose (BS51) : la main qui arrive est toujours posable en
-// entier aux niveaux 1 à 6 (le filet du moteur), le tirage donne les pièces qui finissent des
+// entier aux niveaux 1 à 5 (le filet du moteur), le tirage donne les pièces qui finissent des
 // lignes, et la garantie d'effacement de BS55 : la main qui arrive offre une pièce qui efface quand la
-// grille le permet. Les niveaux difficiles (7 à 10) n'ont aucune de ces aides.
+// grille le permet. Les niveaux difficiles (6 à 10) n'ont aucune de ces aides.
 //
 // Le solveur est celui de pose-verificateur.js, indépendant du code du tirage.
 
@@ -45,8 +45,8 @@ const enTexte = (g) => g.map((r) => r.map((v) => (v ? '#' : '.')).join(''))
 
 // --- Le seuil et la force de l'aide ---------------------------------------------------
 
-test('le seuil : le niveau 7 est le premier difficile, l\'aide est pleine au niveau 1 et nulle dès le seuil', () => {
-  assert.equal(NIVEAU_DIFFICILE, 7)
+test('le seuil : le niveau 6 est le premier difficile, l\'aide est pleine au niveau 1 et nulle dès le seuil', () => {
+  assert.equal(NIVEAU_DIFFICILE, 6)
   assert.equal(aideDuNiveau(NIVEAU_MIN), 1)
   for (const n of DIFFICILES) assert.equal(aideDuNiveau(n), 0, `niveau ${n}`)
   for (let n = NIVEAU_MIN + 1; n < NIVEAU_DIFFICILE; n++) {
@@ -74,7 +74,7 @@ function apresLaDernierePose(niveau) {
   return poser(e, 0, 0, 1)
 }
 
-test('le filet : aux niveaux 1 à 6, l\'aperçu impossible est remplacé par une main posable', () => {
+test('le filet : aux niveaux 1 à 5, l\'aperçu impossible est remplacé par une main posable', () => {
   for (const niveau of FACILES) {
     const e = apresLaDernierePose(niveau)
     assert.equal(e.dernierCoup.nouveauTour, true)
@@ -87,7 +87,7 @@ test('le filet : aux niveaux 1 à 6, l\'aperçu impossible est remplacé par une
   }
 })
 
-test('le filet : aux niveaux 7 à 10, l\'aperçu devient la main tel quel, même impossible', () => {
+test('le filet : aux niveaux 6 à 10, l\'aperçu devient la main tel quel, même impossible', () => {
   for (const niveau of DIFFICILES) {
     const e = apresLaDernierePose(niveau)
     assert.equal(e.dernierCoup.mainRemplacee, false)
@@ -132,7 +132,7 @@ function mainsDeParties(niveau, graines, poses) {
   return mains
 }
 
-test('invariant : aux niveaux 1 à 6, la main est posable en entier à chaque début de tour, quelles que soient les poses', () => {
+test('invariant : aux niveaux 1 à 5, la main est posable en entier à chaque début de tour, quelles que soient les poses', () => {
   let tours = 0
   for (const niveau of FACILES) {
     const mains = mainsDeParties(niveau, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 240)
@@ -143,7 +143,7 @@ test('invariant : aux niveaux 1 à 6, la main est posable en entier à chaque d�
   assert.ok(tours > 400, `${tours}`)
 })
 
-test('invariant : aux niveaux 7 à 10, on retrouve des impasses (main impossible à poser en entier)', () => {
+test('invariant : aux niveaux 6 à 10, on retrouve des impasses (main impossible à poser en entier)', () => {
   const impasses = DIFFICILES.flatMap((niveau) => mainsDeParties(niveau, [1, 2, 3, 4, 5, 6, 7, 8], 240)).filter((m) => !m)
   assert.ok(impasses.length > 0, 'aucune impasse aux niveaux difficiles')
 })
@@ -279,7 +279,7 @@ test('au niveau 1, bien plus de mains qui effacent qu\'au niveau 10, pour un mê
       for (let i = 0; i < 120 && piecesJouables(e).length > 0; i++) {
         if (i === 0 || e.dernierCoup.nouveauTour) {
           mains++
-          const main = e.enCours.map((x) => x.id)
+          const main = e.enCours.filter(Boolean).map((x) => x.id)
           if (mainEfface(e.grille, main, main).efface) efface++
         }
         const index = piecesJouables(e)[0]
@@ -336,7 +336,7 @@ test("changerNiveau : annuler un coup ne ramène pas l'ancien niveau, et la part
   assert.equal(importerPartie(exporterPartie(annulee)).niveau, 2)
 })
 
-test('le tirage d\'aide : les pièces tirées aux niveaux 1 à 6 sont celles de la table de poids (aucune pièce hors table)', () => {
+test('le tirage d\'aide : les pièces tirées aux niveaux 1 à 5 sont celles de la table de poids (aucune pièce hors table)', () => {
   const alea = generateur(3)
   for (const niveau of FACILES) {
     const permis = new Set(poidsDesPieces(niveau).filter((p) => p.poids > 0).map((p) => p.id))
@@ -352,7 +352,7 @@ test('le tirage d\'aide : les pièces tirées aux niveaux 1 à 6 sont celles de 
 // --- Les niveaux difficiles ne changent pas ----------------------------------------------------
 
 // Les mains et aperçus des premiers tours de parties jouées de façon fixe, résumés par un hachage.
-// Relevés lors de BS55 (table de poids, tirage hostile) : un changement du tirage des niveaux
+// Relevés lors de BS57 (tables de difficulté, tirage hostile) : un changement du tirage des niveaux
 // difficiles doit être voulu, puis les valeurs de AVANT recalées ici.
 function empreinte(niveau, graine) {
   let e = nouvellePartie({ graine, niveau })
@@ -369,9 +369,15 @@ function empreinte(niveau, graine) {
   return { tours: vus.length / 2, h }
 }
 
-const AVANT = { 7: { h: 3958814698, tours: 157 }, 8: { h: 1114786648, tours: 155 }, 9: { h: 2320583078, tours: 147 }, 10: { h: 3933838289, tours: 116 } }
+const AVANT = {
+  6: { h: 1110363723, tours: 144 },
+  7: { h: 2537083809, tours: 173 },
+  8: { h: 723410503, tours: 130 },
+  9: { h: 1575157794, tours: 110 },
+  10: { h: 2587539461, tours: 96 },
+}
 
-test('niveaux 7 à 10 : mêmes tirages que lors du dernier calage, pour une même graine', () => {
+test('niveaux 6 à 10 : mêmes tirages que lors du dernier calage, pour une même graine', () => {
   for (const niveau of DIFFICILES) {
     let h = 0
     let tours = 0

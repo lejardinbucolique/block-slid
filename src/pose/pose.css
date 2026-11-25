@@ -24,7 +24,7 @@
   --pose-cadre: #8f8576;         /* le cadre de la grille */
   --pose-grille-fond: #cfc6b8;   /* le fond de la grille, entre les cases */
   --pose-case-vide: #ddd5c8;     /* une case libre */
-  --pose-case-vide-haut: #e6dfd3;/* une case libre qui s'élève (aperçu du coup) */
+  --pose-case-vide-haut: #e6dfd3;/* une case libre qui s'élevait (avant BS59 : l'aperçu éclaire maintenant des bandes) */
   --pose-bouton: #fbf7f0;        /* les boutons de bonus */
   --pose-bouton-bord: #b9ae9d;
   --pose-ombre-pose: rgba(0, 0, 0, .28);
@@ -233,30 +233,11 @@
   margin: 1px;
   background: var(--pose-motif-case), var(--pose-case-vide);
   border-radius: 4px;
-  isolation: isolate; /* ses deux couches d'aperçu se peignent sous son bloc (z-index: -1) */
-  transition: transform .14s ease-out;
 }
-/* L'aperçu du coup se peint dans deux couches de la case, qui ne font que s'allumer (opacity) :
-   la surface qui s'élève, son ombre (::before), et le halo de la case visée (::after). Une
-   transition d'ombre ou de fond sur la case elle-même la faisait repeindre à chaque image,
-   texture du bloc comprise : le glisser saccadait sous les styles riches (BS53). */
-#pose .pose-case::before,
-#pose .pose-case:not(.surprise)::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  z-index: -1;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .14s ease-out;
-}
-#pose .pose-case::before {
-  background: var(--pose-motif-case), var(--pose-case-vide-haut);
-  box-shadow: 0 calc(var(--cell) * .12) calc(var(--cell) * .12) var(--pose-ombre-pose);
-}
-#pose .pose-case:not(.surprise)::after { box-shadow: 0 0 0 2px #fff, 0 0 calc(var(--cell) * .35) rgba(255, 255, 255, .9); }
-
+/* Pendant le glisser et la pose, aucune case de la grille ne change d'aspect : l'aperçu vit dans deux
+   couches à part (#pose-ombre, #pose-lignes, plus bas). Changer la classe d'une case texturée la faisait
+   repeindre, et les cases d'une ligne qui s'élevait s'y mettaient toutes d'un coup : la pièce s'arrêtait un
+   instant sous le doigt (BS59). */
 
 /* Un bloc : une case de pièce, sur la grille comme dans les rangées de pièces. Son enveloppe
    .pose-bloc (la couleur, l'état d'une animation) contient le dessin <i>. Les deux teintes --c1
@@ -320,11 +301,8 @@
 }
 #pose .pose-fantome > .pose-bloc > b { font-size: calc(var(--cell) * .55); }
 
-/* L'aperçu du coup : l'ombre pâle où la pièce tombera, l'emplacement qui s'allume... */
-#pose .pose-case.ombre > .pose-bloc { visibility: visible; opacity: .5; }
-#pose .pose-case.vise { z-index: 1; }
-/* La couche de l'ombre (ecran.js, preparerOmbre) : ses cases sont des cases visées, posées au-dessus
-   des cases ordinaires et sous celles qui s'élèvent, comme une case visée de la grille. */
+/* L'aperçu du coup : la couche de l'ombre (ecran.js, preparerOmbre), dessinée une fois par glisser puis
+   seulement déplacée, et celle des lignes et colonnes que la pose complèterait (bandes éclairées). */
 #pose-ombre {
   position: absolute;
   left: 5px; /* CADRE_PX de ecran.js */
@@ -348,17 +326,28 @@
   box-shadow: 0 0 0 2px #fff, 0 0 calc(var(--cell) * .35) rgba(255, 255, 255, .9);
 }
 #pose .pose-ombre-case > .pose-bloc { position: absolute; inset: -1px; opacity: .75; }
-#pose .pose-case.vise::after { opacity: 1; }
-#pose .pose-case.vise > .pose-bloc { opacity: .75; }
-
-/* ... et chaque ligne ou colonne qui serait complétée s'élève un peu au-dessus de la surface. */
-#pose .pose-case.eleve {
-  z-index: 2;
-  transform: translateY(calc(var(--cell) * -.09)) scale(1.04);
+/* Les bandes : une par ligne et par colonne, dans leur couche, cachées sauf celles que la pose complète.
+   Une surface claire, cernée de blanc, avec son ombre : la ligne qui va s'effacer se détache de la grille. */
+#pose-lignes {
+  position: absolute;
+  left: 5px; /* CADRE_PX de ecran.js */
+  top: 5px;
+  width: 0;
+  height: 0;
+  z-index: 1;
+  pointer-events: none;
+  will-change: opacity; /* sa propre couche : changer de bande ne repeint ni la grille ni ses textures */
 }
-#pose .pose-case.eleve::before { opacity: 1; }
-#pose .pose-case.eleve.vise::before { box-shadow: 0 calc(var(--cell) * .12) calc(var(--cell) * .14) var(--pose-ombre-pose); }
-#pose .pose-case.eleve.vise::after { box-shadow: 0 0 0 2px #fff; }
+#pose .pose-bande {
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, .36);
+  box-shadow: 0 0 0 2px #fff, 0 3px 8px var(--pose-ombre-pose);
+}
+#pose .pose-bande-ligne { width: calc(var(--cell) * var(--cols) - 2px); height: calc(var(--cell) - 2px); }
+#pose .pose-bande-colonne { width: calc(var(--cell) - 2px); height: calc(var(--cell) * var(--lignes) - 2px); }
 
 /* La pose, l'effacement. */
 #pose .pose-case.nouveau > .pose-bloc { animation: pose-nouveau .28s ease-out; }
@@ -552,6 +541,9 @@
 #pose .pose-emplacement.bloquee .pose-piece { opacity: .4; filter: grayscale(.7); }
 #pose .pose-emplacement.visable .pose-piece { animation: pose-visable .9s ease-in-out infinite; }
 @keyframes pose-visable { 50% { transform: scale(1.14); filter: brightness(1.15); } }
+/* La pièce prise dans la main s'efface à .18 : sa couche existe déjà (will-change), l'opacité n'est alors qu'un réglage de
+   composition. Sans elle, ses textures se repeignaient dans l'image où la pièce se détache de la main (BS61). */
+#pose .pose-emplacement .pose-piece { will-change: opacity; }
 #pose .pose-emplacement.leve .pose-piece { opacity: .18; }
 #pose .pose-emplacement.refus .pose-piece { animation: pose-refus .3s ease-out; }
 @keyframes pose-refus { 25%, 75% { transform: translateX(-5px); } 50% { transform: translateX(5px); } }

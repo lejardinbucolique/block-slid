@@ -59,7 +59,7 @@ import { REGLAGES } from './reglages.js'
 import { piece, pieceSuivante } from './pieces.js'
 import { NIVEAU_PAR_DEFAUT, NIVEAU_DIFFICILE, NIVEAU_APERCU_JOUABLE, niveauValide, aideDuNiveau, poidsDesPieces } from './niveaux.js'
 import { SORTES, sorteValide, reserveVide, ajouterBonus, retirerBonus, lireReserve } from './bonus.js'
-import { AU_CHOIX, nouveauDefi, compteSurprise, gainsDeCoup } from './gains.js'
+import { AU_CHOIX, nouveauDefi, compteSurprise, gainsDeCoup, duNiveau } from './gains.js'
 import { LISTE, couleursDepart, couleursSuivantes, couleursDePieces, lireCouleurs } from './couleurs.js'
 
 // Le niveau est un réglage de la partie, qui peut changer en cours de route (changerNiveau) :
@@ -103,7 +103,7 @@ function etatVide(reglages, graine, niveauDemande) {
     // score ; la case surprise posée sur la grille { ligne, col, reste }, ou null ; les
     // gains « au choix » en attente.
     defi: nouveauDefi(niveau, 0, reglages.gains),
-    palier: reglages.gains.palier,
+    palier: duNiveau(reglages.gains.palier, niveau),
     surprise: null,
     choix: 0,
     // L'état d'avant la dernière pose, pour annulerCoup ; null s'il n'y a rien à annuler.
@@ -231,7 +231,7 @@ export function poser(etat, index, ligne, col) {
 // Garantie d'effacement (BS55) : aux niveaux faciles, si aucune pièce de la main ne peut effacer
 // une ligne ou une colonne sur la grille réelle alors qu'une pièce de la table le pourrait, la main
 // est tirée de nouveau pour en contenir une. La chance en est pleine au niveau 1 et s'estompe jusqu'au
-// niveau 7 (aideDuNiveau). La main impossible à poser est remplacée dans les mêmes conditions de chance.
+// niveau 6 (aideDuNiveau). La main impossible à poser est remplacée dans les mêmes conditions de chance.
 //
 // Aperçu joué en avance (BS58) : la main qui arrive peut compter moins de trois pièces (places de
 // l'aperçu déjà posées). Si elle n'en compte aucune, elle est un tirage neuf, garanti comme les autres.
@@ -529,7 +529,7 @@ export const perdue = (etat) => bloquee(etat) && etat.choix === 0 && bonusUtiles
 // case surprise ('posee', 'gagnee', 'perdue' ou null).
 function gagner(e, enMain, { lignes, colonnes, casesDisparues, ligne, col, grilleVidee }) {
   const g = e.reglages.gains
-  const gains = gainsDeCoup({ lignes: lignes.length, colonnes: colonnes.length, grilleVidee }, g)
+  const gains = gainsDeCoup({ lignes: lignes.length, colonnes: colonnes.length, grilleVidee }, g, e.niveau)
 
   // Défi : les points gagnés depuis son début, tous comptés, dans les coups accordés.
   const defi = { ...e.defi, coupsFaits: e.defi.coupsFaits + 1 }
@@ -546,7 +546,7 @@ function gagner(e, enMain, { lignes, colonnes, casesDisparues, ligne, col, grill
   // Paliers de score : un par seuil franchi, un gros coup peut en franchir plusieurs.
   while (e.score >= e.palier) {
     gains.push({ cause: 'palier', sorte: 'changer', palier: e.palier })
-    e.palier += g.palier
+    e.palier += duNiveau(g.palier, e.niveau)
   }
 
   // Case surprise. Celle de la grille : effacée avant que son numéro tombe à zéro, elle
