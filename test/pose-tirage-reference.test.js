@@ -1,7 +1,9 @@
-// Le tirage garanti rend les mêmes pièces qu'avant l'accélération de BS61 : soixante tirages (tous niveaux, grilles
-// de toutes densités, avec ou sans pièces en main, avec ou sans garantie d'effacement) rejoués avec le même hasard,
-// comparés aux pièces rendues par le code d'avant (test/tirage-reference.json). Un tirage qui change fait changer
-// toutes les parties : si c'est voulu, régénérer le fichier ; sinon, le code est en tort.
+// Le tirage garanti rend les mêmes pièces que celles gardées dans test/tirage-reference.json : soixante tirages
+// (tous niveaux, grilles de toutes densités, avec ou sans pièces en main, avec ou sans garantie d'effacement)
+// rejoués avec le même hasard. Un tirage qui change fait changer toutes les parties : si c'est voulu, régénérer le
+// fichier ; sinon, le code est en tort. Écrit avant l'accélération de BS61 (qui n'a rien changé), puis régénéré en
+// BS62 pour les niveaux 1 à 5 seulement (le tirage regarde les lignes presque pleines) : les niveaux 6 à 10 sont
+// restés tels que BS55 les rendait.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -20,7 +22,7 @@ function hasard(graine) {
   }
 }
 
-test('le tirage garanti rend les mêmes pièces que le code d\'avant BS61', () => {
+test('le tirage garanti rend les mêmes pièces que la référence', () => {
   assert.equal(reference.length, 60)
   for (const c of reference) {
     const grille = c.rangees.map((r) => [...r].map((v) => (v === 'x' ? 'x' : null)))

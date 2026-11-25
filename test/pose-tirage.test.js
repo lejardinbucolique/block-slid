@@ -301,9 +301,12 @@ test('répartition : pas que des petites, les grosses viennent avec le niveau', 
     assert.ok(blocs < 0.35, `niveau ${niveau} : ${blocs} de blocs`)
     assert.ok(formes >= 5, `niveau ${niveau} : ${formes} formes`)
   }
-  // Niveau 1 : ni grosses ni tordues. Niveau 10 : de tout, dont des grosses.
+  // Niveau 1 : peu de tordues. Les petites pièces (bloc, barre de 2, coin) y viennent surtout quand elles finissent une
+  // ligne ou une colonne presque pleine (BS62) : sur ces grilles éparpillées, jusqu'à un tiers des pièces de difficulté 3
+  // et plus ; la table seule n'en donne que 8 %. Niveau 10 : de tout, dont des grosses.
   const part = (n, d) => par[n].ids.filter((id) => piece(id).difficulte >= d).length / par[n].ids.length
-  assert.ok(part(1, 3) <= 0.13, `${part(1, 3)}`)
+  assert.ok(part(1, 3) <= 0.4, `${part(1, 3)}`)
+  assert.ok(part(1, 4) <= 0.1, `${part(1, 4)}`)
   assert.ok(part(10, 4) >= 0.15, `${part(10, 4)}`)
   assert.ok(part(10, 3) >= 0.35, `${part(10, 3)}`)
   // La difficulté moyenne monte avec le niveau (à une marge de hasard près), de bout en bout.

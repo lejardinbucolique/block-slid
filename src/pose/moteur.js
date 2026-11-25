@@ -228,6 +228,9 @@ export function poser(etat, index, ligne, col) {
 // poser en entier, la main n'est pas cet aperçu mais un tirage neuf, garanti sur la grille réelle,
 // et le nouvel aperçu se tire à partir d'elle. Une main dont la recherche épuise son budget reste.
 //
+// Les besoins (BS62) : de même, si la main termine moins de lignes et de colonnes presque pleines que ne le
+// ferait une main du catalogue, elle est tirée de nouveau, avec la même chance, pour en terminer le plus.
+//
 // Garantie d'effacement (BS55) : aux niveaux faciles, si aucune pièce de la main ne peut effacer
 // une ligne ou une colonne sur la grille réelle alors qu'une pièce de la table le pourrait, la main
 // est tirée de nouveau pour en contenir une. La chance en est pleine au niveau 1 et s'estompe jusqu'au
@@ -240,7 +243,7 @@ function finDeTour(e) {
   e.enCours = e.suivantes
   const vide = e.enCours.every((x) => x === null)
   const impossible = !vide && mainImpossible(e)
-  const sansEffacement = !vide && !impossible && mainSansEffacement(e)
+  const sansEffacement = !vide && !impossible && (mainSansEffacement(e) || mainSansBesoin(e))
   if (vide || impossible || sansEffacement) {
     const exigerEfface = e.niveau < NIVEAU_DIFFICILE && aleatoire(e) < aideDuNiveau(e.niveau)
     if (vide || impossible || exigerEfface) {
@@ -269,6 +272,15 @@ function mainSansEffacement(e) {
   const possibles = poidsDesPieces(e.niveau).filter((q) => q.poids > 0).map((q) => q.id)
   const { efface, possible } = mainEfface(e.grille, e.enCours.filter(Boolean).map((x) => x.id), possibles)
   return !efface && possible
+}
+
+// Aux niveaux faciles (BS62) : la main qui arrive termine moins de lignes et de colonnes presque pleines
+// (au plus trois cases à combler) que ne le ferait une main du catalogue de même taille.
+function mainSansBesoin(e) {
+  const { mainBesoins } = e.reglages
+  if (e.niveau >= NIVEAU_DIFFICILE || typeof mainBesoins !== 'function') return false
+  const { couverts, atteignables } = mainBesoins(e.grille, e.enCours.filter(Boolean).map((x) => x.id))
+  return couverts < atteignables
 }
 
 // Ce qu'annulerCoup rend : l'état d'une partie hors réserve et niveau, en données simples.

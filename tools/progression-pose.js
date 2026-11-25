@@ -5,7 +5,8 @@
 //   node tools/progression-pose.js [parties=40] [plafond=1500] [niveaux=1,2,...,10]
 //
 // La difficulté lue : les pertes pour mille poses (plus elle est grande, plus le niveau est dur), qui
-// doit monter régulièrement ; le remplissage moyen et la part de mains qui effacent la confirment.
+// doit monter régulièrement ; le remplissage moyen et la part de mains qui effacent la confirment. BS62 : la part des lignes et colonnes
+// presque pleines (au plus trois cases à combler) que la main termine, puis la main et l'aperçu.
 
 import { fork } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -26,7 +27,7 @@ if (process.send) {
     enfant.on('error', reject)
     enfant.send({ niveau, parties, plafond })
   })))
-  console.log('niveau | pertes/1000 poses | survie méd. (min) | bloquées | remplissage | effacés/pose | cases/pièce | mains qui effacent | mains remplacées | fin de tour ms')
+  console.log('niveau | pertes/1000 poses | survie méd. (min) | bloquées | remplissage | effacés/pose | cases/pièce | mains qui effacent | mains remplacées | fin de tour ms | main finit (atteignable) | avec aperçu')
   let precedent = null
   for (const m of resultats) {
     const marche = precedent === null ? '' : ` (x${(m.pertesPourMille / precedent).toFixed(2)})`
@@ -34,6 +35,7 @@ if (process.send) {
     console.log([
       String(m.niveau).padStart(6), `${m.pertesPourMille.toFixed(2)}${marche}`, `${m.mediane} (${m.min})`, `${m.bloquees}/${m.parties}`, m.remplissage.toFixed(1),
       m.effacesParPose.toFixed(3), m.casesParPiece.toFixed(2), `${(100 * m.mainsQuiEffacent).toFixed(0)} %`, `${m.remplacees}/${m.tours}`, m.moyenneFinDeTour.toFixed(2),
+      `${(100 * m.besoinsCouverts).toFixed(0)} % (${(100 * m.besoinsAtteignables).toFixed(0)} %)`, `${(100 * m.besoinsCouvertsApercu).toFixed(0)} %`,
     ].join(' | '))
   }
 }

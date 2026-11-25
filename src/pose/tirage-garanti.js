@@ -42,6 +42,15 @@
 // ligne ou une colonne dès la pose, si une pièce de la table le peut. Le moteur la demande quand la
 // main prévue par l'aperçu n'offre rien à effacer, avec une chance qui s'estompe jusqu'au niveau 6.
 //
+// Le besoin (BS62). Aux niveaux faciles, le tirage regarde aussi la grille pour ce qui lui manque : les
+// lignes et les colonnes à qui il manque au plus BESOIN_MANQUE_MAX cases (`besoinsSur`), avec, pour chacune, les
+// pièces du catalogue (petites pièces comprises, quel que soit leur poids dans la table) qui la terminent d'une
+// pose. Chaque pièce du tour est alors, avec une chance égale à l'aide du niveau (1 au niveau 1 : tant qu'un besoin
+// n'est pas couvert, la pièce en couvre un), une pièce qui termine un besoin pas encore couvert, la bonne forme
+// dans la bonne orientation, posable sur la copie comme les autres. `exigerEfface` rend cette chance pleine. Les
+// pièces d'un tour se couvrent les besoins de la grille de départ (la grille réelle, ou la grille d'arrivée du
+// témoin pour l'aperçu), pas ceux que la pose d'une autre ferait naître.
+//
 // Interface (voir tirage.js) : tirageGaranti({ aleatoire, niveau, nombre, grille,
 // enCours, reglages, exigerEfface }) rend `nombre` identifiants de pièces. tirerGaranti rend la même
 // chose avec le détail du tirage (pour mesurer).
@@ -82,6 +91,14 @@ export const AIDE_TAILLE = 0
 export const AIDE_FRAGILITE = 10
 export const ESSAIS_FRAGILITE = 8
 export const CANDIDATS_AIDE = 24
+
+// Le besoin (BS62) : une ligne ou une colonne à qui il manque au plus BESOIN_MANQUE_MAX cases. Une pièce qui
+// peut terminer un besoin sort au moins avec le poids BESOIN_PLANCHER (la table donne parfois 0 aux petites
+// pièces tordues du niveau 1), fois le carré du nombre de besoins qu'elle termine. Un candidat vaut en plus
+// AIDE_BESOIN fois l'aide fois la part des besoins que sa main termine.
+export const BESOIN_MANQUE_MAX = 3
+export const BESOIN_PLANCHER = 1
+export const AIDE_BESOIN = 3
 
 // Le tirage hostile des niveaux difficiles (BS55, niveaux.js : hostiliteDuNiveau, 0 aux niveaux
 // faciles, 1 au niveau 10) : le poids d'une pièce est multiplié par
@@ -262,6 +279,78 @@ function frontieres(rangees, plein) {
   return n
 }
 
+// --- Besoins : les lignes et colonnes presque pleines ------------------------------
+
+// Les pièces du catalogue, en masques.
+let TOUTES = null
+const toutes = () => (TOUTES ??= CATALOGUE.map((p) => infos(p.id)))
+
+// Les besoins de cette grille : [{ sens: 'l' | 'c', i, manque, finisseurs: Set }], les lignes et colonnes à qui il
+// manque de 1 à BESOIN_MANQUE_MAX cases et qu'une pièce du catalogue termine d'une pose (finisseurs : ses
+// identifiants, une pièce y est si l'une de ses places comble tout ce qui manque à la rangée).
+function besoinsSur(rangees, dim) {
+  const { hauteur, largeur, plein } = dim
+  const manque = manques(rangees, plein)
+  const besoins = []
+  for (let i = 0; i < hauteur; i++) {
+    const m = manque.lignes[i]
+    const n = nombreDeBits(m)
+    if (n < 1 || n > BESOIN_MANQUE_MAX) continue
+    const bas = rang(m & -m)
+    const finisseurs = new Set()
+    for (const p of toutes()) {
+      for (let r = 0; r < p.hauteur; r++) {
+        const a = p.lignes[r]
+        const k = bas - rang(a & -a)
+        const l = i - r
+        if (k < 0 || a << k !== m || l < 0 || l + p.hauteur > hauteur || k + p.largeur > largeur) continue
+        if (tientEn(rangees, p, l, k)) { finisseurs.add(p.id); break }
+      }
+    }
+    if (finisseurs.size > 0) besoins.push({ sens: 'l', i, manque: n, finisseurs })
+  }
+  for (let c = 0; c < manque.colonnes.length; c++) {
+    const m = manque.colonnes[c]
+    const n = nombreDeBits(m)
+    if (n < 1 || n > BESOIN_MANQUE_MAX) continue
+    const bas = rang(m & -m)
+    const finisseurs = new Set()
+    for (const p of toutes()) {
+      for (let q = 0; q < p.largeur; q++) {
+        const a = p.colonnes[q]
+        const l = bas - rang(a & -a)
+        const k = c - q
+        if (l < 0 || a << l !== m || k < 0 || k + p.largeur > largeur || l + p.hauteur > hauteur) continue
+        if (tientEn(rangees, p, l, k)) { finisseurs.add(p.id); break }
+      }
+    }
+    if (finisseurs.size > 0) besoins.push({ sens: 'c', i: c, manque: n, finisseurs })
+  }
+  return besoins
+}
+
+// Combien de ces besoins la main termine-t-elle ?
+const couverts = (besoins, ids) => besoins.filter((b) => ids.some((id) => b.finisseurs.has(id))).length
+
+// La pièce qui termine le plus de besoins parmi ceux qui restent, tirée au hasard selon son poids dans la table
+// (au moins BESOIN_PLANCHER) fois le carré du nombre de besoins restants qu'elle termine ; seules celles qui
+// tiennent sur la copie `grille` sont tirées. null si aucune.
+function pieceDeBesoin(restants, poids, grille, dim, aleatoire) {
+  const { hauteur, largeur } = dim
+  const parId = new Map()
+  for (const b of restants) for (const id of b.finisseurs) parId.set(id, (parId.get(id) ?? 0) + 1)
+  const table = new Map(poids.map((q) => [q.id, q.poids]))
+  const liste = []
+  let total = 0
+  for (const [id, n] of parId) {
+    if (!tientQuelquePart(grille, infos(id), hauteur, largeur)) continue
+    const w = n * n * Math.max(table.get(id) ?? 0, BESOIN_PLANCHER)
+    liste.push({ id, poids: w })
+    total += w
+  }
+  return liste.length === 0 ? null : tirerSelonPoids(liste, total, aleatoire())
+}
+
 // --- Témoins de la pose des pièces en main ------------------------------------
 
 // Une grille d'arrivée où toutes les pièces `ids` sont posées (dans un ordre et à des
@@ -338,35 +427,51 @@ function temoins(rangees, ids, dim, aleatoire, detail) {
 // des colonnes. Chaque pièce est posée sur la copie là où elle efface le plus, à égalité là où
 // elle se loge le plus serré, de sorte que les pièces suivantes se tirent sur la grille que
 // le joueur aurait en jouant bien. Avec `exiger`, la première pièce est une de celles qui effacent
-// sur la grille de départ (s'il y en a). Rend les pièces et le nombre de lignes et colonnes que
-// la suite de poses efface.
-function construireAide(depart, nombre, poids, aide, dim, aleatoire, memo, exiger) {
+// sur la grille de départ (s'il y en a). Les besoins de la grille de départ (BS62, voir besoinsSur) :
+// avec la chance `forcer`, la pièce tirée est une qui termine un besoin pas encore couvert (si une tient
+// encore sur la copie), même si la table ne la donne pas à ce niveau. Rend les pièces, le nombre de
+// lignes et colonnes que la suite de poses efface et le nombre de pièces tirées pour un besoin.
+function construireAide(depart, nombre, poids, aide, dim, aleatoire, memo, exiger, besoins, forcer) {
   const { hauteur, largeur, plein } = dim
   let grille = depart
   const ids = []
   let efface = 0
+  let forcees = 0
+  let restants = besoins
   for (let i = 0; i < nombre; i++) {
     const entree = optionsSur(grille, poids, dim, memo)
     let options = entree.options
-    // La garantie d'effacement (BS55) : la première pièce est posée sur la grille de départ, elle
-    // efface donc quelque chose pour de bon quand la grille du moment le permet.
-    if (exiger && i === 0) {
-      const efface = options.filter((o) => o.meilleur > 0)
-      if (efface.length > 0) options = efface
+    let choix = null
+    let meilleur = 0
+    if (restants.length > 0 && aleatoire() < forcer) {
+      choix = pieceDeBesoin(restants, poids, grille, dim, aleatoire)
+      if (choix !== null) {
+        forcees++
+        restants = restants.filter((b) => !b.finisseurs.has(choix))
+        meilleur = Math.max(...lieuxDe(entree, choix, dim).map((x) => x.e))
+      }
     }
-    let total = 0
-    const ponderees = options.map((o) => {
-      const w = o.poids * (1 + aide * AIDE_EFFACE * Math.min(o.meilleur, AIDE_EFFACE_MAX))
-      total += w
-      return { id: o.id, poids: w }
-    })
-    if (options.length === 0) {
-      // Grille pleine (impossible en jeu) : rien ne tient, on rend le bloc sans le poser.
-      ids.push('bloc.0')
-      continue
+    if (choix === null) {
+      // La garantie d'effacement (BS55) : la première pièce est posée sur la grille de départ, elle
+      // efface donc quelque chose pour de bon quand la grille du moment le permet.
+      if (exiger && i === 0 && forcees === 0) {
+        const efface = options.filter((o) => o.meilleur > 0)
+        if (efface.length > 0) options = efface
+      }
+      let total = 0
+      const ponderees = options.map((o) => {
+        const w = o.poids * (1 + aide * AIDE_EFFACE * Math.min(o.meilleur, AIDE_EFFACE_MAX))
+        total += w
+        return { id: o.id, poids: w }
+      })
+      if (options.length === 0) {
+        // Grille pleine (impossible en jeu) : rien ne tient, on rend le bloc sans le poser.
+        ids.push('bloc.0')
+        continue
+      }
+      choix = tirerSelonPoids(ponderees, total, aleatoire())
+      meilleur = options.find((o) => o.id === choix).meilleur
     }
-    const choix = tirerSelonPoids(ponderees, total, aleatoire())
-    const { meilleur } = options.find((o) => o.id === choix)
     const lieux = lieuxDe(entree, choix, dim)
     const p = infos(choix)
     const meilleurs = lieux.filter((x) => x.e === meilleur)
@@ -381,7 +486,7 @@ function construireAide(depart, nombre, poids, aide, dim, aleatoire, memo, exige
     efface += meilleur
     ids.push(choix)
   }
-  return { ids, efface, frontieres: frontieres(grille, plein) }
+  return { ids, efface, forcees, frontieres: frontieres(grille, plein) }
 }
 
 // Variante des niveaux difficiles (BS55) : même construction que celle des niveaux faciles, mais le
@@ -608,7 +713,7 @@ export function tirerGaranti({ aleatoire, niveau, nombre, grille, enCours = [], 
   const aide = aideDuNiveau(niveau)
   const hostilite = hostiliteDuNiveau(niveau)
   const nombreCandidats = CANDIDATS_AIDE
-  const detail = { temoin: true, budgetEpuise: false, remplacees: 0, candidats: nombreCandidats, liberte: 0, efface: 0 }
+  const detail = { temoin: true, budgetEpuise: false, remplacees: 0, candidats: nombreCandidats, liberte: 0, efface: 0, besoins: 0, couverts: 0 }
 
   const rangees = versMasques(grille)
   let departs = [rangees]
@@ -618,16 +723,21 @@ export function tirerGaranti({ aleatoire, niveau, nombre, grille, enCours = [], 
     else detail.temoin = false
   }
 
+  // Les besoins de chaque grille de départ (aux niveaux faciles) ; la chance qu'une pièce en couvre un.
+  const besoins = aide > 0 ? departs.map((d) => besoinsSur(d, dim)) : []
+  const forcer = exigerEfface ? 1 : aide
   const parts = departs.map((d) => partsOuvertes(d, dim))
   const candidats = []
   const memo = new Map()
   for (let j = 0; j < nombreCandidats; j++) {
     const d = j % departs.length
     if (aide > 0) {
-      const { ids, efface, frontieres } = construireAide(departs[d], nombre, poids, aide, dim, aleatoire, memo, exigerEfface && enCours.length === 0)
+      const { ids, efface, forcees, frontieres } = construireAide(departs[d], nombre, poids, aide, dim, aleatoire, memo, exigerEfface && enCours.length === 0, besoins[d], forcer)
       const libre = liberte(ids, parts[d])
       const fragile = fragilite(departs[d], ids, dim, aleatoire)
-      candidats.push({ ids, liberte: libre, efface, fragilite: fragile, valeur: libre + aide * (AIDE_VALEUR_EFFACE * efface - AIDE_FRONTIERES * frontieres / 100 - AIDE_FRAGILITE * fragile + Math.sqrt(aide) * AIDE_TAILLE * ids.reduce((n, id) => n + piece(id).cases.length, 0) / 10) })
+      const finis = couverts(besoins[d], ids)
+      const partFinie = besoins[d].length > 0 ? finis / Math.min(besoins[d].length, nombre) : 0
+      candidats.push({ ids, liberte: libre, efface, forcees, besoins: besoins[d].length, couverts: finis, fragilite: fragile, valeur: libre + aide * (AIDE_VALEUR_EFFACE * efface + AIDE_BESOIN * partFinie - AIDE_FRONTIERES * frontieres / 100 - AIDE_FRAGILITE * fragile + Math.sqrt(aide) * AIDE_TAILLE * ids.reduce((n, id) => n + piece(id).cases.length, 0) / 10) })
     } else {
       const ids = construireGene(departs[d], nombre, poids, hostilite, dim, aleatoire, memo)
       const libre = liberte(ids, parts[d])
@@ -644,9 +754,11 @@ export function tirerGaranti({ aleatoire, niveau, nombre, grille, enCours = [], 
   detail.liberte = gardee.liberte
   detail.fragilite = gardee.fragilite
   detail.efface = gardee.efface ?? 0
+  detail.besoins = gardee.besoins ?? 0
+  detail.couverts = gardee.couverts ?? 0
   const ids = gardee.ids
-  // Garantie d'effacement : la pièce qui efface est la première construite, on la place au hasard.
-  if (exigerEfface && aide > 0 && enCours.length === 0) {
+  // Garantie d'effacement, besoins : les pièces qui efface ou finissent un besoin sont construites en premier, on les place au hasard.
+  if (aide > 0 && ((exigerEfface && enCours.length === 0) || gardee.forcees > 0)) {
     for (let i = ids.length - 1; i > 0; i--) {
       const j = Math.floor(aleatoire() * (i + 1))
       ;[ids[i], ids[j]] = [ids[j], ids[i]]
@@ -687,4 +799,25 @@ export function mainEfface(grille, main, possibles) {
     return false
   }
   return { efface: main.some(efface), possible: possibles.some(efface) }
+}
+
+// Sur cette grille, les besoins (BS62, voir besoinsSur) : { besoins, couverts, atteignables } : combien de
+// lignes et colonnes presque pleines une pièce du catalogue termine, combien en terminent les pièces `main`,
+// et combien en terminerait au mieux une main de même taille prise au catalogue (glouton). Sert au moteur
+// (moteur.js) pour remplacer une main qui manque une occasion ; ne touche pas au hasard.
+export function mainBesoins(grille, main) {
+  const dim = { hauteur: grille.length, largeur: grille[0].length, plein: (1 << grille[0].length) - 1 }
+  let restants = besoinsSur(versMasques(grille), dim)
+  const total = restants.length
+  const finis = couverts(restants, main)
+  let atteignables = 0
+  for (let i = 0; i < main.length && restants.length > 0; i++) {
+    const n = new Map()
+    for (const b of restants) for (const id of b.finisseurs) n.set(id, (n.get(id) ?? 0) + 1)
+    let meilleur = null
+    for (const [id, k] of n) if (meilleur === null || k > meilleur.k) meilleur = { id, k }
+    atteignables += meilleur.k
+    restants = restants.filter((b) => !b.finisseurs.has(meilleur.id))
+  }
+  return { besoins: total, couverts: finis, atteignables }
 }

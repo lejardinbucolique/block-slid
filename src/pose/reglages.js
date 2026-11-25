@@ -1,7 +1,7 @@
 // Réglages de block-pose (BS40), en un seul endroit.
 // Pour essayer d'autres valeurs : nouvellePartie({ reglages: { ...REGLAGES, plafondSerie: 8 } }).
 
-import { tirageGaranti, mainPosable, mainEfface } from './tirage-garanti.js'
+import { tirageGaranti, mainPosable, mainEfface, mainBesoins } from './tirage-garanti.js'
 import { GAINS } from './gains.js'
 
 // Multiplicateur le plus haut d'une série de coups qui effacent : le deuxième
@@ -38,4 +38,7 @@ export const REGLAGES = Object.freeze({
   // La garantie d'effacement des niveaux faciles (BS55, moteur.js) : la main qui arrive a-t-elle une
   // pièce qui efface ? Sans cette fonction, aucune garantie.
   mainEfface,
+  // Les besoins des niveaux faciles (BS62, moteur.js) : la main qui arrive termine-t-elle les lignes et
+  // colonnes presque pleines autant qu'une main le pourrait ? Sans cette fonction, aucun contrôle.
+  mainBesoins,
 })
